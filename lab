@@ -1,0 +1,458 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly root_dir
+readonly image_config="${root_dir}/config/images.env"
+readonly lab_label="cloudsprocket.lab=docker"
+readonly network_name="dpl-net"
+readonly port_min=8200
+readonly port_max=8299
+readonly minimum_free_kb=$((5 * 1024 * 1024))
+
+fail() {
+  printf 'Error: %s\n' "$*" >&2
+  exit 1
+}
+
+load_image_config() {
+  [[ -f "${image_config}" ]] || fail "Image configuration is missing: ${image_config}"
+  # The file is maintained in this repository and contains simple NAME=value pairs.
+  # shellcheck source=config/images.env
+  source "${image_config}"
+  : "${PYTHON_IMAGE:?}" "${NODE_IMAGE:?}" "${NGINX_IMAGE:?}" "${REGISTRY_IMAGE:?}"
+  readonly PYTHON_IMAGE NODE_IMAGE NGINX_IMAGE REGISTRY_IMAGE
+}
+
+require_docker_cli() {
+  command -v docker >/dev/null 2>&1 \
+    || fail 'Docker was not found. Install Docker Engine or Docker Desktop, then try again.'
+}
+
+require_daemon() {
+  require_docker_cli
+  if ! docker info >/dev/null 2>&1; then
+    local context
+    context="$(docker context show 2>/dev/null || true)"
+    if [[ "${context}" == desktop-* ]]; then
+      fail 'Docker Desktop is not reachable. Start Docker Desktop and wait until the engine is ready.'
+    fi
+    fail 'The Docker daemon is not reachable. Start the Docker Engine service and try again.'
+  fi
+}
+
+network_label() {
+  docker network inspect --format '{{index .Labels "cloudsprocket.lab"}}' \
+    "${network_name}" 2>/dev/null || true
+}
+
+ensure_network() {
+  if docker network inspect "${network_name}" >/dev/null 2>&1; then
+    [[ "$(network_label)" == 'docker' ]] \
+      || fail "Network ${network_name} already exists without the ${lab_label} ownership label. Rename or remove it yourself."
+    printf 'Network %s is ready.\n' "${network_name}"
+    return
+  fi
+
+  docker network create --label "${lab_label}" "${network_name}" >/dev/null
+  printf 'Created labelled network %s.\n' "${network_name}"
+}
+
+ensure_image() {
+  local image="$1"
+  if docker image inspect "${image}" >/dev/null 2>&1; then
+    printf 'Base image %s is already available.\n' "${image}"
+    return
+  fi
+
+  printf 'Pulling base image %s. This is needed only on the first run.\n' "${image}"
+  docker pull "${image}"
+}
+
+remove_labelled_containers() {
+  local ids=() id
+  while IFS= read -r id; do
+    [[ -n "${id}" ]] && ids+=("${id}")
+  done < <(docker container ls --all --quiet --filter "label=${lab_label}")
+  if (( ${#ids[@]} == 0 )); then
+    printf 'No labelled lab containers to remove.\n'
+    return
+  fi
+  docker container rm --force "${ids[@]}" >/dev/null
+  printf 'Removed %s labelled lab container(s).\n' "${#ids[@]}"
+}
+
+remove_labelled_networks() {
+  local ids=() id
+  while IFS= read -r id; do
+    [[ -n "${id}" ]] && ids+=("${id}")
+  done < <(docker network ls --quiet --filter "label=${lab_label}")
+  if (( ${#ids[@]} == 0 )); then
+    printf 'No labelled lab networks to remove.\n'
+    return
+  fi
+  docker network rm "${ids[@]}" >/dev/null
+  printf 'Removed %s labelled lab network(s).\n' "${#ids[@]}"
+}
+
+remove_labelled_volumes() {
+  local ids=() id
+  while IFS= read -r id; do
+    [[ -n "${id}" ]] && ids+=("${id}")
+  done < <(docker volume ls --quiet --filter "label=${lab_label}")
+  if (( ${#ids[@]} == 0 )); then
+    printf 'No labelled lab volumes to remove.\n'
+    return
+  fi
+  docker volume rm "${ids[@]}" >/dev/null
+  printf 'Removed %s labelled lab volume(s).\n' "${#ids[@]}"
+}
+
+remove_labelled_images() {
+  local raw_ids=() ids=() id seen
+  while IFS= read -r id; do
+    [[ -n "${id}" ]] && raw_ids+=("${id}")
+  done < <(docker image ls --all --quiet --filter "label=${lab_label}")
+  for id in "${raw_ids[@]}"; do
+    seen=false
+    local existing
+    for existing in "${ids[@]}"; do
+      [[ "${existing}" == "${id}" ]] && seen=true && break
+    done
+    [[ "${seen}" == false ]] && ids+=("${id}")
+  done
+  if (( ${#ids[@]} == 0 )); then
+    printf 'No labelled lab images to remove.\n'
+    return
+  fi
+  docker image rm "${ids[@]}" >/dev/null
+  printf 'Removed %s labelled lab image(s).\n' "${#ids[@]}"
+}
+
+format_bytes() {
+  awk -v bytes="$1" 'BEGIN {
+    if (bytes >= 1073741824) printf "%.2f GiB", bytes / 1073741824;
+    else if (bytes >= 1048576) printf "%.2f MiB", bytes / 1048576;
+    else if (bytes >= 1024) printf "%.2f KiB", bytes / 1024;
+    else printf "%d B", bytes;
+  }'
+}
+
+compose_version_ok() {
+  local raw="$1" version major minor
+  version="${raw#v}"
+  version="${version%%-*}"
+  IFS=. read -r major minor _ <<< "${version}"
+  [[ "${major}" =~ ^[0-9]+$ && "${minor}" =~ ^[0-9]+$ ]] || return 1
+  (( major > 2 || (major == 2 && minor >= 20) ))
+}
+
+host_listener_snapshot() {
+  if command -v ss >/dev/null 2>&1; then
+    ss -H -ltnp 2>/dev/null || true
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null || true
+  elif command -v netstat >/dev/null 2>&1; then
+    netstat -ano -p tcp 2>/dev/null || true
+  fi
+}
+
+check_ports() {
+  local failures=0 name mappings owner mapping host_port listener_port listener
+  local docker_ports='|' listener_rows container_rows
+  container_rows="$(docker container ls \
+    --format '{{.Names}}|{{.Ports}}|{{.Label "cloudsprocket.lab"}}' 2>/dev/null || true)"
+  while IFS='|' read -r name mappings owner; do
+    [[ -n "${name}" ]] || continue
+    local mapping_list=()
+    IFS=',' read -r -a mapping_list <<< "${mappings}"
+    for mapping in "${mapping_list[@]}"; do
+      host_port="$(printf '%s\n' "${mapping}" \
+        | sed -n 's/.*:\([0-9][0-9]*\)->.*/\1/p')"
+      [[ "${host_port}" =~ ^[0-9]+$ ]] || continue
+      (( host_port >= port_min && host_port <= port_max )) || continue
+      docker_ports+="${host_port}|"
+      if [[ "${owner}" != 'docker' ]]; then
+        [[ -n "${owner}" ]] || owner='unlabelled'
+        printf 'FAIL  Port %s is held by container %s (%s). Stop it before using this lab.\n' \
+          "${host_port}" "${name}" "${owner}"
+        failures=$((failures + 1))
+      fi
+    done
+  done <<< "${container_rows}"
+
+  listener_rows="$(host_listener_snapshot)"
+  while IFS='|' read -r listener_port listener; do
+    [[ "${listener_port}" =~ ^[0-9]+$ ]] || continue
+    [[ "${docker_ports}" == *"|${listener_port}|"* ]] && continue
+    printf 'FAIL  Port %s is held by a host process: %s\n' "${listener_port}" "${listener}"
+    failures=$((failures + 1))
+  done < <(printf '%s\n' "${listener_rows}" | awk -v first="${port_min}" -v last="${port_max}" '
+    /LISTEN|LISTENING/ {
+      for (field = 1; field <= NF; field++) {
+        token = $field
+        if (token ~ /:[0-9]+$/) {
+          count = split(token, pieces, ":")
+          port = pieces[count] + 0
+          if (port >= first && port <= last && !seen[port]++) {
+            print port "|" $0
+            break
+          }
+        }
+      }
+    }
+  ')
+
+  if (( failures == 0 )); then
+    printf 'PASS  Ports %s-%s are available or already owned by this lab.\n' \
+      "${port_min}" "${port_max}"
+  fi
+  return "${failures}"
+}
+
+doctor() {
+  local failures=0 compose_raw server_version driver driver_status available_kb
+  printf 'Docker Practical Lab doctor\n\n'
+
+  if ! command -v docker >/dev/null 2>&1; then
+    printf 'FAIL  Docker was not found. Install Docker Engine or Docker Desktop.\n'
+    return 1
+  fi
+  printf 'PASS  Docker CLI is installed.\n'
+
+  if ! docker info >/dev/null 2>&1; then
+    local context
+    context="$(docker context show 2>/dev/null || true)"
+    if [[ "${context}" == desktop-* ]]; then
+      printf 'FAIL  Docker Desktop is not reachable. Start Docker Desktop and wait for its engine.\n'
+    else
+      printf 'FAIL  Docker Engine is not reachable. Start the Docker service and try again.\n'
+    fi
+    return 1
+  fi
+  server_version="$(docker version --format '{{.Server.Version}}')"
+  printf 'PASS  Docker daemon %s is reachable.\n' "${server_version}"
+
+  compose_raw="$(docker compose version --short 2>/dev/null || true)"
+  if [[ -z "${compose_raw}" ]]; then
+    printf 'FAIL  The Docker Compose plugin is unavailable. Install a current Docker Compose plugin.\n'
+    failures=$((failures + 1))
+  elif compose_version_ok "${compose_raw}"; then
+    printf 'PASS  Docker Compose plugin %s meets the 2.20 minimum.\n' "${compose_raw}"
+  else
+    printf 'FAIL  Docker Compose plugin %s is unsupported. Install version 2.20 or later.\n' "${compose_raw}"
+    failures=$((failures + 1))
+  fi
+
+  if docker buildx version >/dev/null 2>&1; then
+    printf 'PASS  BuildKit is available through Docker Buildx.\n'
+  else
+    printf 'WARN  Docker Buildx was not detected. It becomes required for exercise 09.\n'
+  fi
+
+  driver="$(docker info --format '{{.Driver}}')"
+  driver_status="$(docker info --format '{{json .DriverStatus}}')"
+  if [[ "${driver_status}" == *'io.containerd.snapshotter.v1'* ]]; then
+    printf 'INFO  Image store: containerd. Reported image sizes can differ from the classic store.\n'
+  else
+    printf 'INFO  Image store: classic %s graphdriver. Reported image sizes can differ from containerd.\n' "${driver}"
+  fi
+
+  available_kb=''
+  if command -v df >/dev/null 2>&1; then
+    available_kb="$(df -Pk "${root_dir}" 2>/dev/null | awk 'NR == 2 {print $4}' || true)"
+  fi
+  if [[ "${available_kb}" =~ ^[0-9]+$ ]]; then
+    if (( available_kb < minimum_free_kb )); then
+      printf 'FAIL  Less than 5 GiB is free on the workspace drive. Free space before pulling images.\n'
+      failures=$((failures + 1))
+    else
+      printf 'PASS  The workspace drive has at least 5 GiB free.\n'
+      printf 'INFO  Docker Desktop uses a separate virtual disk; confirm its allocation if pulls fail.\n'
+    fi
+  else
+    printf 'WARN  Free disk space could not be measured. Keep at least 5 GiB available for images.\n'
+  fi
+
+  if docker network inspect "${network_name}" >/dev/null 2>&1 \
+    && [[ "$(network_label)" != 'docker' ]]; then
+    printf 'FAIL  Network %s exists without the %s ownership label. Rename or remove it yourself.\n' \
+      "${network_name}" "${lab_label}"
+    failures=$((failures + 1))
+  fi
+
+  local port_failures=0
+  check_ports || port_failures=$?
+  failures=$((failures + port_failures))
+
+  local stale=0 name state
+  while IFS='|' read -r name state; do
+    [[ -n "${name}" ]] || continue
+    if [[ "${state}" != 'running' ]]; then
+      printf 'WARN  Labelled container %s is %s. Run ./lab up to recover or ./lab reset for a clean state.\n' \
+        "${name}" "${state}"
+      stale=$((stale + 1))
+    fi
+  done < <(docker container ls --all --filter "label=${lab_label}" --format '{{.Names}}|{{.State}}')
+  (( stale == 0 )) && printf 'PASS  No stale labelled containers were found.\n'
+
+  if [[ "${CODESPACES:-false}" == 'true' ]]; then
+    printf 'PASS  Codespaces Docker-in-Docker is isolated from your local Docker daemon.\n'
+    printf 'INFO  Personal accounts include 120 core-hours and 15 GB storage monthly. Stop the Codespace when finished.\n'
+    printf 'WARN  The privileged development container is not a security boundary.\n'
+  fi
+
+  if (( failures == 0 )); then
+    printf '\nDoctor found no blocking problems.\n'
+  else
+    printf '\nDoctor found %s blocking problem(s).\n' "${failures}"
+  fi
+  return "${failures}"
+}
+
+start_lab() {
+  require_daemon
+  doctor || fail 'Doctor found blocking problems.'
+  printf '\nPreparing the Docker practice workspace...\n'
+  ensure_network
+  ensure_image "${PYTHON_IMAGE}"
+  ensure_image "${NODE_IMAGE}"
+  ensure_image "${NGINX_IMAGE}"
+  printf '\nThe scaffold is ready. Exercise 01 lands in the exercises PR.\n'
+  printf 'For now, inspect the environment with: ./lab status\n'
+}
+
+stop_lab() {
+  require_daemon
+  remove_labelled_containers
+  printf 'Lab images, volumes and the baseline network were kept.\n'
+}
+
+reset_lab() {
+  require_daemon
+  printf 'Removing only resources carrying %s.\n' "${lab_label}"
+  remove_labelled_containers
+  remove_labelled_networks
+  remove_labelled_volumes
+  remove_labelled_images
+  printf 'Shared upstream images and BuildKit cache were left untouched.\n\n'
+  start_lab
+}
+
+show_status() {
+  require_daemon
+  printf 'Docker Practical Lab status\n\n'
+  if docker network inspect "${network_name}" >/dev/null 2>&1 \
+    && [[ "$(network_label)" == 'docker' ]]; then
+    printf 'Baseline network: %s (ready)\n' "${network_name}"
+  else
+    printf 'Baseline network: not ready; run ./lab up\n'
+  fi
+
+  local containers
+  containers="$(docker container ls --all --filter "label=${lab_label}" \
+    --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}')"
+  if [[ "$(printf '%s\n' "${containers}" | wc -l | tr -d ' ')" -gt 1 ]]; then
+    printf '\n%s\n' "${containers}"
+  else
+    printf '\nLabelled containers: none\n'
+  fi
+
+  local registry_state='stopped'
+  if docker container inspect dpl-registry >/dev/null 2>&1 \
+    && [[ "$(docker container inspect --format '{{index .Config.Labels "cloudsprocket.lab"}}' dpl-registry)" == 'docker' ]]; then
+    registry_state="$(docker container inspect --format '{{if .State.Running}}running{{else}}stopped{{end}}' dpl-registry)"
+  fi
+  printf 'Local registry: %s\n' "${registry_state}"
+
+  local image_ids=() image_id size total=0
+  while IFS= read -r image_id; do
+    [[ -n "${image_id}" ]] && image_ids+=("${image_id}")
+  done < <(docker image ls --all --quiet --filter "label=${lab_label}")
+  for image_id in "${image_ids[@]}"; do
+    size="$(docker image inspect --format '{{.Size}}' "${image_id}")"
+    [[ "${size}" =~ ^[0-9]+$ ]] && total=$((total + size))
+  done
+  printf 'Labelled image sizes: %s across %s image reference(s)\n' \
+    "$(format_bytes "${total}")" "${#image_ids[@]}"
+}
+
+show_logs() {
+  local target="${1:-}" ids=() id owner
+  require_daemon
+  if [[ -n "${target}" ]]; then
+    id="$(docker container inspect --format '{{.Id}}' "${target}" 2>/dev/null || true)"
+    [[ -n "${id}" ]] || fail "Container ${target} does not exist."
+    owner="$(docker container inspect --format '{{index .Config.Labels "cloudsprocket.lab"}}' "${id}")"
+    [[ "${owner}" == 'docker' ]] || fail "Container ${target} is not owned by this lab."
+    docker logs --follow --tail 100 "${id}"
+    return
+  fi
+
+  while IFS= read -r id; do
+    [[ -n "${id}" ]] && ids+=("${id}")
+  done < <(docker container ls --quiet --filter "label=${lab_label}")
+  if (( ${#ids[@]} == 0 )); then
+    printf 'No running lab containers have logs yet.\n'
+  elif (( ${#ids[@]} == 1 )); then
+    docker logs --follow --tail 100 "${ids[0]}"
+  else
+    printf 'More than one lab container is running. Choose one:\n'
+    docker container ls --filter "label=${lab_label}" --format '  {{.Names}}'
+    printf 'Run ./lab logs <container>.\n'
+  fi
+}
+
+run_check() {
+  local exercise="${1:-}" matches=()
+  [[ "${exercise}" =~ ^[0-9][0-9]$ ]] || fail 'Provide a two-digit exercise number, for example: ./lab check 01'
+  matches=("${root_dir}/checks/${exercise}_"*.sh)
+  [[ -e "${matches[0]}" ]] \
+    || fail "Exercise ${exercise} is not available in this alpha yet."
+  bash "${matches[0]}"
+}
+
+not_available() {
+  local feature="$1"
+  fail "${feature} is reserved by the lab contract but is not available in 0.1.0-alpha.1."
+}
+
+show_usage() {
+  cat <<'EOF'
+Usage: ./lab <command> [argument]
+
+Commands:
+  up                 Prepare the labelled network and base images
+  down               Stop and remove labelled lab containers only
+  reset              Recreate the clean baseline using label-only cleanup
+  status             Show lab containers, ports, registry and image sizes
+  doctor             Check Docker, Compose, BuildKit, disk and ports
+  check <exercise>   Run an exercise check when exercises are installed
+  break <drill>      Apply a drill when drills are installed
+  verify <drill>     Verify a drill repair without changing state
+  drills             List drills when drills are installed
+  logs [container]   Follow logs for a labelled lab container
+  version            Print the lab version
+  help               Show this help
+EOF
+}
+
+load_image_config
+command_name="${1:-help}"
+argument="${2:-}"
+
+case "${command_name}" in
+  up) start_lab ;;
+  down) stop_lab ;;
+  reset) reset_lab ;;
+  status) show_status ;;
+  doctor) doctor ;;
+  check) run_check "${argument}" ;;
+  break) not_available 'Break/fix drills' ;;
+  verify) not_available 'Break/fix verification' ;;
+  drills) printf 'No drills are available in 0.1.0-alpha.1.\n' ;;
+  logs) show_logs "${argument}" ;;
+  version) tr -d '\r\n' < "${root_dir}/VERSION"; printf '\n' ;;
+  help|-h|--help) show_usage ;;
+  *) fail "Unknown command '${command_name}'. Run ./lab help." ;;
+esac

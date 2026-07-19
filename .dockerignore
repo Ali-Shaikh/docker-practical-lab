@@ -1,0 +1,7 @@
+**
+!apps/
+!apps/**
+!config/
+!config/**
+!docker/
+!docker/**

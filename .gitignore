@@ -1,0 +1,21 @@
+# Local agent and working files
+.local/
+.agents/
+.claude/
+.codex/
+AGENTS.md
+CLAUDE.md
+
+# Local secrets and environment overrides
+.env
+.env.*
+!.env.example
+
+# Logs, coverage and editor state
+*.log
+coverage/
+__pycache__/
+*.py[cod]
+.DS_Store
+.idea/
+.vscode/

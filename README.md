@@ -1,6 +1,6 @@
 # Docker Practical Lab
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/CloudSprocket/docker-practical-lab?quickstart=1)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/Ali-Shaikh/docker-practical-lab?quickstart=1)
 
 A practical Docker workspace you clone and keep. It is being built as a free,
 MIT-licensed alternative to short-lived hosted playgrounds, with self-checked

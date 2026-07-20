@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Static validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Validate Bash syntax
+        shell: bash
+        run: |
+          bash -n ./lab
+          find . -type f -name '*.sh' -not -path './.git/*' -print0 \
+            | xargs -0 -r -n1 bash -n
+
+      - name: Run ShellCheck
+        shell: bash
+        run: |
+          shellcheck -x ./lab
+          find . -type f -name '*.sh' -not -path './.git/*' -print0 \
+            | xargs -0 -r shellcheck -x
+
+      - name: Validate the repository contract
+        run: python3 ./tests/repository-contract.py
+
+      - name: Parse and analyse the PowerShell wrapper
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tokens = $null
+          $parseErrors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path './lab.ps1'),
+            [ref] $tokens,
+            [ref] $parseErrors
+          )
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | Format-List | Out-String | Write-Host
+            throw 'PowerShell parsing failed.'
+          }
+
+          $installParameters = @{
+            Name = 'PSScriptAnalyzer'
+            RequiredVersion = '1.25.0'
+            Repository = 'PSGallery'
+            Scope = 'CurrentUser'
+            Force = $true
+          }
+          Install-Module @installParameters
+          Import-Module PSScriptAnalyzer -RequiredVersion 1.25.0
+          # This is an interactive wrapper, so user-facing terminal output is intentional.
+          $analysisParameters = @{
+            Path = './lab.ps1'
+            Severity = @('Error', 'Warning')
+            ExcludeRule = 'PSAvoidUsingWriteHost'
+          }
+          $findings = @(Invoke-ScriptAnalyzer @analysisParameters)
+          if ($findings.Count -gt 0) {
+            $findings | Format-Table -AutoSize | Out-String | Write-Host
+            throw 'PSScriptAnalyzer found errors or warnings.'
+          }
+          $global:LASTEXITCODE = 0
+
+      - name: Validate wrapper help and catalogue parity
+        shell: bash
+        run: |
+          bash ./lab help > /tmp/lab-help.bash
+          pwsh -NoLogo -NoProfile -File ./lab.ps1 help \
+            | sed 's#\.[\\]lab\.ps1#./lab#' > /tmp/lab-help.pwsh
+          diff --unified --strip-trailing-cr /tmp/lab-help.bash /tmp/lab-help.pwsh
+
+          bash ./lab drills > /tmp/lab-drills.bash
+          pwsh -NoLogo -NoProfile -File ./lab.ps1 drills > /tmp/lab-drills.pwsh
+          diff --unified --strip-trailing-cr /tmp/lab-drills.bash /tmp/lab-drills.pwsh
+
+      - name: Check Markdown links
+        uses: lycheeverse/lychee-action@v2.9.0
+        with:
+          args: >-
+            --no-progress
+            --root-dir .
+            './**/*.md'
+          fail: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  smoke:
+    name: Smoke (${{ matrix.architecture }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            runner: ubuntu-latest
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+      - name: Run the scaffold smoke test
+        run: bash ./tests/smoke.sh
+
+  devcontainer:
+    name: Development container smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+      - name: Build the development container and run its smoke test
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: bash .devcontainer/post-create.sh && bash ./tests/smoke.sh

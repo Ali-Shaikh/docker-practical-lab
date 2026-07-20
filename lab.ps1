@@ -221,7 +221,9 @@ function Invoke-LabelledImageRemoval {
         return
     }
 
-    $dockerArguments = @('image', 'rm') + $ids
+    # A labelled image is lab-created, so removing every tag it carries is
+    # within the reset contract; without --force a multi-tagged image aborts.
+    $dockerArguments = @('image', 'rm', '--force') + $ids
     Invoke-DockerChecked -DockerArguments $dockerArguments -DiscardOutput
     Write-Host ('Removed {0} labelled lab image(s).' -f $ids.Count)
 }
@@ -349,6 +351,10 @@ function Test-LabPort {
             }
             $port = [int]$Matches['Port']
             if ($port -lt $script:PortMinimum -or $port -gt $script:PortMaximum) {
+                continue
+            }
+            # Dual-stack publishing repeats one host port per address family.
+            if ($dockerPorts.ContainsKey($port)) {
                 continue
             }
             $dockerPorts[$port] = $true
@@ -530,22 +536,27 @@ function Invoke-LabDoctor {
     return [int]$failures
 }
 
-function Invoke-LabStart {
-    Assert-DockerDaemon
-    $doctorFailures = Invoke-LabDoctor
-    if ($doctorFailures -ne 0) {
-        Write-LabError 'Doctor found blocking problems.'
-    }
-
+function Invoke-WorkspacePreparation {
     Write-Host
     Write-Host 'Preparing the Docker practice workspace...'
     Invoke-LabNetworkPreparation
     Invoke-BaseImagePreparation -Image ([string]$script:ImageConfigValues['PYTHON_IMAGE'])
     Invoke-BaseImagePreparation -Image ([string]$script:ImageConfigValues['NODE_IMAGE'])
     Invoke-BaseImagePreparation -Image ([string]$script:ImageConfigValues['NGINX_IMAGE'])
+    Invoke-BaseImagePreparation -Image ([string]$script:ImageConfigValues['REGISTRY_IMAGE'])
     Write-Host
     Write-Host 'The scaffold is ready. Exercise 01 lands in the exercises PR.'
     Write-Host 'For now, inspect the environment with: .\lab.ps1 status'
+}
+
+function Invoke-LabStart {
+    Assert-DockerDaemon
+    $doctorFailures = Invoke-LabDoctor
+    if ($doctorFailures -ne 0) {
+        Write-LabError 'Doctor found blocking problems. Fix the reported items, then run .\lab.ps1 up.'
+    }
+
+    Invoke-WorkspacePreparation
 }
 
 function Invoke-LabStop {
@@ -563,7 +574,16 @@ function Invoke-LabReset {
     Invoke-LabelledImageRemoval
     Write-Host 'Shared upstream images and BuildKit cache were left untouched.'
     Write-Host
-    Invoke-LabStart
+
+    # Recreate the baseline network before the doctor gate so a blocking
+    # doctor finding cannot strand the learner without a clean baseline.
+    Invoke-LabNetworkPreparation
+    $doctorFailures = Invoke-LabDoctor
+    if ($doctorFailures -ne 0) {
+        Write-LabError 'Cleanup finished and the baseline network was recreated, but doctor found blocking problems. Fix the reported items, then run .\lab.ps1 up.'
+    }
+
+    Invoke-WorkspacePreparation
 }
 
 function Show-LabStatus {
@@ -690,6 +710,10 @@ function Invoke-ExerciseCheck {
     $checkFiles = @(Get-ChildItem -Path $checkPattern -File -ErrorAction SilentlyContinue)
     if ($checkFiles.Count -eq 0) {
         Write-LabError ('Exercise {0} is not available in this alpha yet.' -f $Exercise)
+    }
+
+    if ($null -eq (Get-Command bash -ErrorAction SilentlyContinue)) {
+        Write-LabError 'Exercise checks run through bash, which was not found. Install Git for Windows (it includes Git Bash) or enable WSL, then try again.'
     }
 
     & bash $checkFiles[0].FullName

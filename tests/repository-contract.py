@@ -24,6 +24,8 @@ REQUIRED_FILES = {
     "tests/repository-contract.py",
     "tests/smoke.sh",
 }
+# Deliberate stability gate: config/images.env mirrors these entries, so an
+# image series bump must update both files in the same commit.
 EXPECTED_IMAGES = {
     "PYTHON_IMAGE": "python:3.14-slim",
     "NODE_IMAGE": "node:24-alpine",

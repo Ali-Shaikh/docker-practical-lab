@@ -113,19 +113,25 @@ remove_labelled_images() {
   while IFS= read -r id; do
     [[ -n "${id}" ]] && raw_ids+=("${id}")
   done < <(docker image ls --all --quiet --filter "label=${lab_label}")
-  for id in "${raw_ids[@]}"; do
-    seen=false
-    local existing
-    for existing in "${ids[@]}"; do
-      [[ "${existing}" == "${id}" ]] && seen=true && break
-    done
-    [[ "${seen}" == false ]] && ids+=("${id}")
-  done
-  if (( ${#ids[@]} == 0 )); then
+  if (( ${#raw_ids[@]} == 0 )); then
     printf 'No labelled lab images to remove.\n'
     return
   fi
-  docker image rm "${ids[@]}" >/dev/null
+  # macOS ships bash 3.2, where expanding an empty array under set -u fails,
+  # so every array loop below is guarded by a count check first.
+  for id in "${raw_ids[@]}"; do
+    seen=false
+    local existing
+    if (( ${#ids[@]} > 0 )); then
+      for existing in "${ids[@]}"; do
+        [[ "${existing}" == "${id}" ]] && seen=true && break
+      done
+    fi
+    [[ "${seen}" == false ]] && ids+=("${id}")
+  done
+  # A labelled image is lab-created, so removing every tag it carries is
+  # within the reset contract; without --force a multi-tagged image aborts.
+  docker image rm --force "${ids[@]}" >/dev/null
   printf 'Removed %s labelled lab image(s).\n' "${#ids[@]}"
 }
 
@@ -166,11 +172,14 @@ check_ports() {
     [[ -n "${name}" ]] || continue
     local mapping_list=()
     IFS=',' read -r -a mapping_list <<< "${mappings}"
+    (( ${#mapping_list[@]} > 0 )) || continue
     for mapping in "${mapping_list[@]}"; do
       host_port="$(printf '%s\n' "${mapping}" \
         | sed -n 's/.*:\([0-9][0-9]*\)->.*/\1/p')"
       [[ "${host_port}" =~ ^[0-9]+$ ]] || continue
       (( host_port >= port_min && host_port <= port_max )) || continue
+      # Dual-stack publishing repeats one host port per address family.
+      [[ "${docker_ports}" == *"|${host_port}|"* ]] && continue
       docker_ports+="${host_port}|"
       if [[ "${owner}" != 'docker' ]]; then
         [[ -n "${owner}" ]] || owner='unlabelled'
@@ -310,16 +319,21 @@ doctor() {
   return "${failures}"
 }
 
-start_lab() {
-  require_daemon
-  doctor || fail 'Doctor found blocking problems.'
+prepare_workspace() {
   printf '\nPreparing the Docker practice workspace...\n'
   ensure_network
   ensure_image "${PYTHON_IMAGE}"
   ensure_image "${NODE_IMAGE}"
   ensure_image "${NGINX_IMAGE}"
+  ensure_image "${REGISTRY_IMAGE}"
   printf '\nThe scaffold is ready. Exercise 01 lands in the exercises PR.\n'
   printf 'For now, inspect the environment with: ./lab status\n'
+}
+
+start_lab() {
+  require_daemon
+  doctor || fail 'Doctor found blocking problems. Fix the reported items, then run ./lab up.'
+  prepare_workspace
 }
 
 stop_lab() {
@@ -336,7 +350,11 @@ reset_lab() {
   remove_labelled_volumes
   remove_labelled_images
   printf 'Shared upstream images and BuildKit cache were left untouched.\n\n'
-  start_lab
+  # Recreate the baseline network before the doctor gate so a blocking
+  # doctor finding cannot strand the learner without a clean baseline.
+  ensure_network
+  doctor || fail 'Cleanup finished and the baseline network was recreated, but doctor found blocking problems. Fix the reported items, then run ./lab up.'
+  prepare_workspace
 }
 
 show_status() {
@@ -369,10 +387,12 @@ show_status() {
   while IFS= read -r image_id; do
     [[ -n "${image_id}" ]] && image_ids+=("${image_id}")
   done < <(docker image ls --all --quiet --filter "label=${lab_label}")
-  for image_id in "${image_ids[@]}"; do
-    size="$(docker image inspect --format '{{.Size}}' "${image_id}")"
-    [[ "${size}" =~ ^[0-9]+$ ]] && total=$((total + size))
-  done
+  if (( ${#image_ids[@]} > 0 )); then
+    for image_id in "${image_ids[@]}"; do
+      size="$(docker image inspect --format '{{.Size}}' "${image_id}")"
+      [[ "${size}" =~ ^[0-9]+$ ]] && total=$((total + size))
+    done
+  fi
   printf 'Labelled image sizes: %s across %s image reference(s)\n' \
     "$(format_bytes "${total}")" "${#image_ids[@]}"
 }

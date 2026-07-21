@@ -32,6 +32,29 @@ jobs:
       - name: Validate the repository contract
         run: python3 ./tests/repository-contract.py
 
+      - name: Check Markdown links
+        uses: lycheeverse/lychee-action@v2.9.0
+        with:
+          # Run before npm install so dependency READMEs are not scanned.
+          # Exclude loopback URLs that only exist while a learner has a local server up.
+          args: >-
+            --no-progress
+            --root-dir .
+            --exclude 127\.0\.0\.1
+            --exclude localhost
+            README.md
+            AGENTS.md
+            apps/README.md
+            apps/python-api/README.md
+            apps/node-app/README.md
+            apps/static-site/README.md
+            checks/README.md
+            docker/README.md
+            drills/README.md
+            exercises/README.md
+          fail: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Set up Node.js for sample apps
         uses: actions/setup-node@v4
         with:
@@ -92,20 +115,6 @@ jobs:
           bash ./lab drills > /tmp/lab-drills.bash
           pwsh -NoLogo -NoProfile -File ./lab.ps1 drills > /tmp/lab-drills.pwsh
           diff --unified --strip-trailing-cr /tmp/lab-drills.bash /tmp/lab-drills.pwsh
-
-      - name: Check Markdown links
-        uses: lycheeverse/lychee-action@v2.9.0
-        with:
-          args: >-
-            --no-progress
-            --root-dir .
-            --exclude-path '**/node_modules/**'
-            --exclude-path '**/dist/**'
-            --exclude 'http://127\.0\.0\.1(:[0-9]+)?'
-            --exclude 'https://127\.0\.0\.1(:[0-9]+)?'
-            './**/*.md'
-          fail: true
-          token: ${{ secrets.GITHUB_TOKEN }}
 
   smoke:
     name: Smoke (${{ matrix.architecture }})

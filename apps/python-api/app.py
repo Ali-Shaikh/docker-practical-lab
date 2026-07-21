@@ -20,6 +20,8 @@ PORT = int(os.environ.get("PORT", "8211"))
 DATA_DIR = Path(os.environ.get("DATA_DIR", "data")).resolve()
 STARTED_AT = time.time()
 NOTE_NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
+# Keep request bodies small; this is a teaching API, not a file upload service.
+MAX_BODY_BYTES = 64 * 1024
 
 
 def ensure_data_dir() -> Path:
@@ -73,7 +75,15 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _read_json(self) -> dict:
-        length = int(self.headers.get("Content-Length", "0"))
+        length_header = self.headers.get("Content-Length", "0").strip() or "0"
+        try:
+            length = int(length_header)
+        except ValueError as exc:
+            raise ValueError("Content-Length must be an integer") from exc
+        if length < 0:
+            raise ValueError("Content-Length must be non-negative")
+        if length > MAX_BODY_BYTES:
+            raise ValueError(f"request body exceeds {MAX_BODY_BYTES} bytes")
         raw = self.rfile.read(length) if length else b"{}"
         if not raw:
             return {}
@@ -140,8 +150,17 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             payload = self._read_json()
-            name = str(payload.get("name", "")).strip()
-            body = str(payload.get("body", ""))
+            raw_name = payload.get("name", "")
+            if not isinstance(raw_name, str):
+                raise ValueError('JSON "name" must be a string')
+            name = raw_name.strip()
+            raw_body = payload.get("body", "")
+            if raw_body is None:
+                body = ""
+            elif isinstance(raw_body, str):
+                body = raw_body
+            else:
+                raise ValueError('JSON "body" must be a string when provided')
             if not name:
                 raise ValueError('JSON must include a non-empty "name"')
             write_note(name, body)

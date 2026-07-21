@@ -12,6 +12,8 @@ import { nanoid } from "nanoid";
 const port = Number.parseInt(process.env.PORT ?? "8212", 10);
 const startedAt = Date.now();
 const instanceId = nanoid(8);
+// Keep request bodies small; this is a teaching API, not a file upload service.
+const maxBodyBytes = 64 * 1024;
 
 type Json = Record<string, unknown>;
 
@@ -27,7 +29,16 @@ function sendJson(res: ServerResponse, status: number, payload: Json): void {
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    let total = 0;
+    req.on("data", (chunk: Buffer) => {
+      total += chunk.length;
+      if (total > maxBodyBytes) {
+        reject(new Error(`request body exceeds ${maxBodyBytes} bytes`));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);
   });
@@ -74,13 +85,23 @@ const server = createServer(async (req, res) => {
     try {
       const raw = await readBody(req);
       const parsed = raw ? (JSON.parse(raw) as Json) : {};
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+        sendJson(res, 400, { error: "JSON body must be an object" });
+        return;
+      }
       sendJson(res, 200, {
         echoed: parsed,
         request_id: nanoid(),
         instance: instanceId,
       });
-    } catch {
-      sendJson(res, 400, { error: "body must be valid JSON" });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "invalid request body";
+      const status = message.includes("exceeds") ? 413 : 400;
+      sendJson(res, status, {
+        error: message.includes("JSON") || message.includes("exceeds")
+          ? message
+          : "body must be valid JSON",
+      });
     }
     return;
   }

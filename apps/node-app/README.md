@@ -45,11 +45,15 @@ $env:PORT = "8212"
 npm start
 ```
 
-For a quick edit loop without writing `dist/` first:
+For a rebuild-and-run loop that works on Node 20 and later (including the lab's
+Node 24 series):
 
 ```bash
 npm run dev
 ```
+
+That script runs `build` then `start`, so it does not depend on Node's
+experimental TypeScript flags.
 
 ## Prove it works
 

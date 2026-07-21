@@ -35,8 +35,8 @@ PowerShell:
 python -m http.server 8080 --bind 127.0.0.1
 ```
 
-Open [http://127.0.0.1:8080/](http://127.0.0.1:8080/) and read the three short
-sections on the page.
+Open `http://127.0.0.1:8080/` in your browser and read the three short sections
+on the page.
 
 You can also open `index.html` directly in a browser. A local server is closer
 to how the nginx exercise will behave (proper paths, no `file://` quirks).

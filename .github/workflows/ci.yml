@@ -99,6 +99,10 @@ jobs:
           args: >-
             --no-progress
             --root-dir .
+            --exclude-path '**/node_modules/**'
+            --exclude-path '**/dist/**'
+            --exclude 'http://127\.0\.0\.1(:[0-9]+)?'
+            --exclude 'https://127\.0\.0\.1(:[0-9]+)?'
             './**/*.md'
           fail: true
           token: ${{ secrets.GITHUB_TOKEN }}

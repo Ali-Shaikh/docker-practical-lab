@@ -35,23 +35,14 @@ jobs:
       - name: Check Markdown links
         uses: lycheeverse/lychee-action@v2.9.0
         with:
-          # Run before npm install so dependency READMEs are not scanned.
-          # Exclude loopback URLs that only exist while a learner has a local server up.
+          # Run before npm install so dependency READMEs are never scanned.
+          # Exclude loopback URLs used as learner verify steps, not live links.
           args: >-
             --no-progress
             --root-dir .
             --exclude 127\.0\.0\.1
             --exclude localhost
-            README.md
-            AGENTS.md
-            apps/README.md
-            apps/python-api/README.md
-            apps/node-app/README.md
-            apps/static-site/README.md
-            checks/README.md
-            docker/README.md
-            drills/README.md
-            exercises/README.md
+            './**/*.md'
           fail: true
           token: ${{ secrets.GITHUB_TOKEN }}
 

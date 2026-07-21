@@ -1,0 +1,24 @@
+{
+  "name": "docker-practical-lab-node-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sample Node app with a real build step for the Docker Practical Lab image-diet exercise",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "esbuild src/server.ts --bundle --platform=node --format=esm --outfile=dist/server.js --legal-comments=none",
+    "start": "node dist/server.js",
+    "dev": "node --experimental-strip-types src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "nanoid": "^5.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "esbuild": "^0.25.5",
+    "typescript": "^5.8.3"
+  }
+}

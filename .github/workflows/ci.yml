@@ -32,6 +32,17 @@ jobs:
       - name: Validate the repository contract
         run: python3 ./tests/repository-contract.py
 
+      - name: Set up Node.js for sample apps
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/node-app/package.json
+
+      - name: Run native sample-app acceptance
+        shell: bash
+        run: bash ./tests/sample-apps-native.sh
+
       - name: Parse and analyse the PowerShell wrapper
         shell: pwsh
         run: |

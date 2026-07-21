@@ -18,11 +18,21 @@ REQUIRED_FILES = {
     "LICENSE",
     "README.md",
     "VERSION",
+    "apps/README.md",
+    "apps/python-api/README.md",
+    "apps/python-api/app.py",
+    "apps/node-app/README.md",
+    "apps/node-app/package.json",
+    "apps/node-app/src/server.ts",
+    "apps/static-site/README.md",
+    "apps/static-site/index.html",
+    "apps/static-site/styles.css",
     "config/images.env",
     "lab",
     "lab.ps1",
     "tests/repository-contract.py",
     "tests/smoke.sh",
+    "tests/sample-apps-native.sh",
 }
 # Deliberate stability gate: config/images.env mirrors these entries, so an
 # image series bump must update both files in the same commit.
@@ -168,8 +178,59 @@ required_workflow_fragments = (
 for fragment in required_workflow_fragments:
     require(fragment in workflow, f"CI is missing required contract: {fragment}")
 require(
+    "tests/sample-apps-native.sh" in workflow,
+    "CI must run the native sample-app acceptance checks",
+)
+require(
     not re.search(r"^\s{4}container:\s*", workflow, re.MULTILINE),
     "CI jobs must use Docker directly on their runner, not a job container",
+)
+
+# Sample apps: each README must teach a native run path (PR 2 acceptance).
+for relative_readme, markers in (
+    (
+        "apps/python-api/README.md",
+        ("python app.py", "/health", "/ready", "8211"),
+    ),
+    (
+        "apps/node-app/README.md",
+        ("npm install", "npm run build", "npm start", "8212"),
+    ),
+    (
+        "apps/static-site/README.md",
+        ("http.server", "index.html", "styles.css"),
+    ),
+):
+    text = read(relative_readme)
+    for marker in markers:
+        require(
+            marker in text,
+            f"{relative_readme} is missing learner guidance for {marker!r}",
+        )
+
+package = json.loads(read("apps/node-app/package.json"))
+require(
+    "build" in package.get("scripts", {}),
+    "node-app must define a build script for the later image-diet exercise",
+)
+require(
+    "esbuild" in package.get("devDependencies", {})
+    or "typescript" in package.get("devDependencies", {}),
+    "node-app must keep a real build toolchain in devDependencies",
+)
+require(
+    bool(package.get("dependencies")),
+    "node-app must keep at least one runtime dependency",
+)
+
+python_api = read("apps/python-api/app.py")
+for marker in ('"/health"', '"/ready"', "DATA_DIR", "PORT"):
+    require(marker in python_api, f"python-api is missing required behaviour: {marker}")
+
+static_html = read("apps/static-site/index.html")
+require(
+    "Image versus container" in static_html or "image versus container" in static_html.lower(),
+    "static-site must teach image versus container in plain language",
 )
 
 print("Repository contract check passed.")

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Docker Practical Lab · sample static site</title>
+    <meta
+      name="description"
+      content="A small static site used by the Docker Practical Lab. Run it natively first; later exercises serve it with nginx."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <p class="eyebrow">Docker Practical Lab · sample app</p>
+      <h1>Three ideas that make containers less mysterious</h1>
+      <p class="lead">
+        This page is deliberately ordinary HTML and CSS. You can open it in a
+        browser without Docker. Later exercises put the same files behind nginx
+        so you can feel the difference between "content on disk" and "a running
+        container serving that content".
+      </p>
+    </header>
+
+    <main>
+      <section>
+        <h2>1. Image versus container</h2>
+        <p>
+          An <strong>image</strong> is a packaged filesystem plus metadata: the
+          bits you build or pull. A <strong>container</strong> is a running (or
+          stopped) instance of that image. Rebuild the image when the recipe
+          changes; start a new container when you want another copy of the same
+          recipe.
+        </p>
+      </section>
+
+      <section>
+        <h2>2. Ports are published on purpose</h2>
+        <p>
+          A process listening inside a container is not automatically reachable
+          on your laptop. Publishing a port maps a host address to the
+          container. This lab always binds published ports to
+          <code>127.0.0.1</code> so practice traffic stays on your machine.
+        </p>
+      </section>
+
+      <section>
+        <h2>3. Labels keep cleanup honest</h2>
+        <p>
+          Lab resources carry
+          <code>cloudsprocket.lab=docker</code>. Reset removes only resources
+          with that label, so your other Docker work survives. That rule is not
+          decoration; it is how a practice lab can share your daemon safely.
+        </p>
+      </section>
+
+      <section class="callout">
+        <h2>How to serve this site natively</h2>
+        <p>From the <code>apps/static-site</code> directory, pick one:</p>
+        <pre><code>python -m http.server 8080 --bind 127.0.0.1</code></pre>
+        <p>Then open <a href="http://127.0.0.1:8080/">http://127.0.0.1:8080/</a>.</p>
+        <p class="note">
+          Later, the lab serves the same files with nginx on a reserved lab
+          port. The HTML does not change; the runtime around it does.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        Part of the
+        <a href="https://github.com/Ali-Shaikh/docker-practical-lab"
+          >Docker Practical Lab</a
+        >
+        · free · MIT
+      </p>
+    </footer>
+  </body>
+</html>

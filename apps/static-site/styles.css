@@ -1,0 +1,132 @@
+:root {
+  color-scheme: light;
+  --bg: #f7f6f3;
+  --fg: #141413;
+  --muted: #5c5a55;
+  --card: #ffffff;
+  --border: #e4e1d8;
+  --accent: #0f6e56;
+  --accent-soft: #e1f5ee;
+  --code-bg: #f0eee6;
+  --max: 42rem;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.site-header,
+main,
+footer {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem;
+}
+
+.site-header {
+  padding-top: 2.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.lead {
+  margin: 1rem 0 0;
+  color: var(--muted);
+  font-size: 1.05rem;
+  max-width: 38rem;
+}
+
+section {
+  margin-top: 1.75rem;
+  padding: 1.25rem 1.35rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+
+h2 {
+  margin: 0 0 0.65rem;
+  font-size: 1.1rem;
+}
+
+p {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+}
+
+p:last-child {
+  margin-bottom: 0;
+}
+
+code,
+pre {
+  font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
+  font-size: 0.9em;
+}
+
+code {
+  background: var(--code-bg);
+  padding: 0.12em 0.35em;
+  border-radius: 0.3em;
+}
+
+pre {
+  margin: 0.75rem 0;
+  padding: 0.9rem 1rem;
+  background: var(--code-bg);
+  border-radius: 0.5rem;
+  overflow-x: auto;
+}
+
+pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.callout {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+
+.callout .note {
+  margin-top: 0.85rem;
+  font-size: 0.95rem;
+}
+
+a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+footer {
+  padding-bottom: 3rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+footer a {
+  font-weight: 600;
+}

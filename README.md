@@ -6,8 +6,9 @@ A practical Docker workspace you clone and keep. It is being built as a free,
 MIT-licensed alternative to short-lived hosted playgrounds, with self-checked
 exercises and realistic break/fix drills.
 
-This repository is currently an early scaffold. It prepares the safe baseline;
-the first exercise arrives in a later alpha.
+This repository is an early alpha. The safe baseline (labelled cleanup, doctor,
+Codespaces) is in place, and three sample apps run natively under `apps/`.
+Self-checked exercises and drills arrive in later increments.
 
 ## Quick start
 
@@ -33,6 +34,19 @@ On Windows PowerShell:
 `up` creates the labelled `dpl-net` network and downloads the shared official
 base images when they are not already present. Once those images are available,
 the scaffold works offline.
+
+## Sample apps (run these first)
+
+Before any Dockerfile, run the sample apps on your machine. Each README is the
+source of truth for "works on my machine".
+
+| App | Path | Default port |
+|---|---|---|
+| Python API | [`apps/python-api`](apps/python-api) | 8211 |
+| Node app | [`apps/node-app`](apps/node-app) | 8212 |
+| Static site | [`apps/static-site`](apps/static-site) | 8080 (native static server) |
+
+See [`apps/README.md`](apps/README.md) for a one-page overview.
 
 ## Safety model
 
@@ -74,10 +88,10 @@ a local registry, state, non-root execution, networks, Compose, secrets and a
 capstone. Six drills cover crash loops, port mapping, networks, permissions,
 dependency health and safe disk cleanup.
 
-Sample applications, exercise briefs, self-checks, reference solutions and
-drills will land in small reviewed increments. Exercise briefs use the same
-three headings throughout: The situation, What you will learn, and Check your
-work.
+Sample applications are under `apps/`. Exercise briefs, self-checks, reference
+solutions and drills land in small reviewed increments. Exercise briefs use the
+same three headings throughout: The situation, What you will learn, and Check
+your work.
 
 ## Requirements and cost
 

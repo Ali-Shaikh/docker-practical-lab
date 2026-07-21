@@ -793,13 +793,69 @@ function Invoke-RegistryCommand {
     }
 }
 
-function Write-ReservedFeatureError {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Feature
-    )
+function Get-DrillDirectory {
+    param([string]$Name = '')
 
-    Write-LabError ('{0} is reserved by the lab contract but is not available in this alpha yet.' -f $Feature)
+    if ([string]::IsNullOrWhiteSpace($Name)) {
+        Write-LabError 'Provide a drill name, for example: .\lab.ps1 break crash-loop'
+    }
+    $dir = Join-Path (Join-Path $script:RootDir 'drills') $Name
+    if (-not (Test-Path -LiteralPath $dir -PathType Container)) {
+        Write-LabError ("Unknown drill '{0}'. Run .\lab.ps1 drills." -f $Name)
+    }
+    return $dir
+}
+
+function Show-DrillList {
+    $catalog = Join-Path (Join-Path $script:RootDir 'drills') 'catalog.tsv'
+    if (-not (Test-Path -LiteralPath $catalog -PathType Leaf)) {
+        Write-LabError 'Drill catalogue is missing.'
+    }
+    Write-Host 'Available drills:'
+    Get-Content -LiteralPath $catalog | Select-Object -Skip 1 | ForEach-Object {
+        if ([string]::IsNullOrWhiteSpace($_)) { return }
+        $parts = $_ -split "`t"
+        if ($parts.Count -ge 4) {
+            Write-Host ('  {0,-14}  (difficulty {1})  {2}' -f $parts[1], $parts[2], $parts[3])
+        }
+    }
+}
+
+function Invoke-DrillBreak {
+    param([string]$Name = '')
+    Assert-DockerDaemon
+    $dir = Get-DrillDirectory -Name $Name
+    $breakScript = Join-Path $dir 'break.sh'
+    if (-not (Test-Path -LiteralPath $breakScript -PathType Leaf)) {
+        Write-LabError ("Drill '{0}' has no break.sh" -f $Name)
+    }
+    if ($null -eq (Get-Command bash -ErrorAction SilentlyContinue)) {
+        Write-LabError 'Drills run through bash. Install Git for Windows or enable WSL.'
+    }
+    & bash $breakScript
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+
+function Invoke-DrillVerify {
+    param([string]$Name = '')
+    Assert-DockerDaemon
+    if ($null -eq (Get-Command bash -ErrorAction SilentlyContinue)) {
+        Write-LabError 'Drills run through bash. Install Git for Windows or enable WSL.'
+    }
+    # Delegate to the Bash wrapper so marker semantics stay identical.
+    Push-Location $script:RootDir
+    try {
+        if ([string]::IsNullOrWhiteSpace($Name)) {
+            & bash ./lab verify
+        }
+        else {
+            & bash ./lab verify $Name
+        }
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    }
+    finally {
+        Pop-Location
+    }
 }
 
 function Show-Usage {
@@ -812,11 +868,11 @@ Commands:
   reset              Recreate the clean baseline using label-only cleanup
   status             Show lab containers, ports, registry and image sizes
   doctor             Check Docker, Compose, BuildKit, disk and ports
-  check <exercise>   Run an exercise self-check (01-10 in this alpha)
+  check <exercise>   Run an exercise self-check (01-10)
   registry <action>  start|stop the local registry on 127.0.0.1:8200
-  break <drill>      Apply a drill when drills are installed
-  verify <drill>     Verify a drill repair without changing state
-  drills             List drills when drills are installed
+  break <drill>      Apply a break/fix drill
+  verify [drill]     Verify a drill repair (or report nothing broken)
+  drills             List available drills
   logs [container]   Follow logs for a labelled lab container
   version            Print the lab version
   help               Show this help
@@ -858,15 +914,15 @@ switch -CaseSensitive ($commandName) {
         break
     }
     'break' {
-        Write-ReservedFeatureError -Feature 'Break/fix drills'
+        Invoke-DrillBreak -Name $argument
         break
     }
     'verify' {
-        Write-ReservedFeatureError -Feature 'Break/fix verification'
+        Invoke-DrillVerify -Name $argument
         break
     }
     'drills' {
-        Write-Host 'No drills are available in this alpha yet.'
+        Show-DrillList
         break
     }
     'logs' {

@@ -7,8 +7,7 @@ MIT-licensed alternative to short-lived hosted playgrounds, with self-checked
 exercises and realistic break/fix drills.
 
 This repository is an early alpha. The safe baseline, sample apps under `apps/`,
-and self-checked exercises **01-10** are ready. Break/fix drills arrive in a
-later increment.
+self-checked exercises **01-10**, and six break/fix drills are ready.
 
 ## Quick start
 
@@ -76,9 +75,9 @@ directory or SSH keys.
 | `doctor` | Check Docker, Compose, BuildKit, disk, ports and stale state |
 | `check NN` | Run an exercise self-check (01-10 available) |
 | `registry start\|stop` | Local registry on 127.0.0.1:8200 for exercise 04 |
-| `break NAME` | Apply a break/fix drill when drills are installed |
-| `verify NAME` | Verify a repair without mutating it |
-| `drills` | List installed drills |
+| `break NAME` | Apply a break/fix drill from `drills/` |
+| `verify [NAME]` | Verify a repair, or report that nothing is broken |
+| `drills` | List available drills |
 | `logs [container]` | Follow logs from a labelled lab container |
 | `version` | Print the lab version |
 
@@ -88,7 +87,7 @@ directory or SSH keys.
 |---|---|
 | Ready | Sample apps under `apps/` |
 | Ready | Exercises 01-10 in `exercises/` with `./lab check NN` |
-| Later | Six break/fix drills |
+| Ready | Six break/fix drills in `drills/` (`./lab drills`) |
 
 Start with exercise 01 after `./lab up`:
 
@@ -96,6 +95,15 @@ Start with exercise 01 after `./lab up`:
 ./lab up
 # follow exercises/01_run-inspect.md
 ./lab check 01
+```
+
+After the exercise track, try a drill:
+
+```bash
+./lab drills
+./lab break crash-loop
+# follow drills/crash-loop/brief.md
+./lab verify crash-loop
 ```
 
 Exercise briefs use the same three headings throughout: The situation, What you

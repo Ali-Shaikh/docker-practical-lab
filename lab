@@ -483,9 +483,55 @@ run_registry() {
   esac
 }
 
-not_available() {
-  local feature="$1"
-  fail "${feature} is reserved by the lab contract but is not available in this alpha yet."
+list_drills() {
+  local catalog="${root_dir}/drills/catalog.tsv"
+  [[ -f "${catalog}" ]] || fail 'Drill catalogue is missing.'
+  printf 'Available drills:\n'
+  # shellcheck disable=SC2034
+  while IFS=$'\t' read -r id slug difficulty summary; do
+    [[ "${id}" == 'id' ]] && continue
+    [[ -z "${slug}" ]] && continue
+    printf '  %-14s  (difficulty %s)  %s\n' "${slug}" "${difficulty}" "${summary}"
+  done < "${catalog}"
+}
+
+resolve_drill_dir() {
+  local name="${1:-}"
+  local dir="${root_dir}/drills/${name}"
+  [[ -n "${name}" ]] || fail 'Provide a drill name, for example: ./lab break crash-loop'
+  [[ -d "${dir}" ]] || fail "Unknown drill '${name}'. Run ./lab drills."
+  printf '%s' "${dir}"
+}
+
+run_break() {
+  local name="${1:-}" dir
+  require_daemon
+  dir="$(resolve_drill_dir "${name}")"
+  [[ -x "${dir}/break.sh" || -f "${dir}/break.sh" ]] \
+    || fail "Drill '${name}' has no break.sh"
+  bash "${dir}/break.sh"
+}
+
+run_verify() {
+  local name="${1:-}" dir active marker_vol='dpl-drill-state'
+  require_daemon
+
+  if [[ -z "${name}" ]]; then
+    if docker volume inspect "${marker_vol}" >/dev/null 2>&1; then
+      active="$(MSYS_NO_PATHCONV=1 docker run --rm --label "${lab_label}" \
+        -v "${marker_vol}:/state:ro" "${PYTHON_IMAGE}" \
+        cat /state/active-drill 2>/dev/null | tr -d '\r\n' || true)"
+      if [[ -n "${active}" ]]; then
+        fail "Drill '${active}' is active. Run: ./lab verify ${active}"
+      fi
+    fi
+    printf 'Nothing is broken. No drill is active.\n'
+    return 0
+  fi
+
+  dir="$(resolve_drill_dir "${name}")"
+  [[ -f "${dir}/verify.sh" ]] || fail "Drill '${name}' has no verify.sh"
+  bash "${dir}/verify.sh"
 }
 
 show_usage() {
@@ -498,11 +544,11 @@ Commands:
   reset              Recreate the clean baseline using label-only cleanup
   status             Show lab containers, ports, registry and image sizes
   doctor             Check Docker, Compose, BuildKit, disk and ports
-  check <exercise>   Run an exercise self-check (01-10 in this alpha)
+  check <exercise>   Run an exercise self-check (01-10)
   registry <action>  start|stop the local registry on 127.0.0.1:8200
-  break <drill>      Apply a drill when drills are installed
-  verify <drill>     Verify a drill repair without changing state
-  drills             List drills when drills are installed
+  break <drill>      Apply a break/fix drill
+  verify [drill]     Verify a drill repair (or report nothing broken)
+  drills             List available drills
   logs [container]   Follow logs for a labelled lab container
   version            Print the lab version
   help               Show this help
@@ -521,9 +567,9 @@ case "${command_name}" in
   doctor) doctor ;;
   check) run_check "${argument}" ;;
   registry) run_registry "${argument}" ;;
-  break) not_available 'Break/fix drills' ;;
-  verify) not_available 'Break/fix verification' ;;
-  drills) printf 'No drills are available in this alpha yet.\n' ;;
+  break) run_break "${argument}" ;;
+  verify) run_verify "${argument}" ;;
+  drills) list_drills ;;
   logs) show_logs "${argument}" ;;
   version) tr -d '\r\n' < "${root_dir}/VERSION"; printf '\n' ;;
   help|-h|--help) show_usage ;;

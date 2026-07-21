@@ -1,0 +1,7 @@
+id	slug	difficulty	summary
+01	crash-loop	1	A labelled app container keeps exiting. Find why and restore a healthy run.
+02	port-tangle	2	The app should answer on a lab port, but the publish map is wrong and something else is in the way.
+03	net-split	2	The API cannot reach its database by name after a network change.
+04	perm-wall	2	A non-root API cannot write its data volume even though the mount looks correct.
+05	zombie-deps	2	Compose says the stack is up, but health and depends_on no longer protect startup order.
+06	space-hog	1	Labelled junk is consuming image space. Clean it without harming unrelated Docker resources.

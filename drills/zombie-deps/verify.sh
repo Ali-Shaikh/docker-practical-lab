@@ -36,9 +36,19 @@ api = services.get("api") or {}
 hc = valkey.get("healthcheck") or {}
 disabled = hc.get("disable") is True
 test = hc.get("test")
-test_s = " ".join(test) if isinstance(test, list) else str(test or "")
-# Require an enabled healthcheck whose test actually probes Valkey.
-hc_ok = (not disabled) and bool(test) and ("ping" in test_s.lower() or "valkey-cli" in test_s.lower())
+tokens = [str(x).lower() for x in test] if isinstance(test, list) else []
+joined = " ".join(tokens)
+# Require an enabled check that actually pings Valkey, not echo/help no-ops.
+# Accept CMD form ["CMD","valkey-cli","ping"] or shell form containing "valkey-cli ping".
+hc_ok = (
+    (not disabled)
+    and bool(tokens)
+    and "valkey-cli" in joined
+    and "ping" in joined
+    and "echo" not in joined
+    and "--help" not in joined
+    and "true" not in tokens
+)
 deps = api.get("depends_on")
 dep_ok = False
 if isinstance(deps, dict):

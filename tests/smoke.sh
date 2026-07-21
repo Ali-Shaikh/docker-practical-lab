@@ -241,14 +241,14 @@ expect_failure_containing \
   'Exercise 99 is not available in this alpha yet.' \
   bash ./lab check 99
 expect_failure_containing \
-  'Break/fix drills is reserved by the lab contract but is not available' \
+  "Unknown drill 'smoke-placeholder'" \
   bash ./lab break smoke-placeholder
-expect_failure_containing \
-  'Break/fix verification is reserved by the lab contract but is not available' \
-  bash ./lab verify smoke-placeholder
 drills_output="$(bash ./lab drills)"
-[[ "${drills_output}" == *'No drills are available in this alpha yet.'* ]] \
-  || fail 'the reserved drills command did not report availability clearly'
+[[ "${drills_output}" == *'crash-loop'* ]] \
+  || fail 'drills catalogue did not list crash-loop'
+nothing_broken="$(bash ./lab verify)"
+[[ "${nothing_broken}" == *'Nothing is broken'* ]] \
+  || fail 'verify without a name should report nothing broken when idle'
 
 printf 'Checking first and repeated startup.\n'
 bash ./lab up
@@ -453,15 +453,47 @@ for exercise in 01 02 03 04 05 06 07 08 09 10; do
   bash ./lab check "${exercise}"
 done
 
+printf 'Checking crash-loop drill break/verify cycle.\n'
+bash ./lab break crash-loop
+if bash ./lab verify crash-loop >/dev/null 2>&1; then
+  fail 'verify crash-loop should fail while the drill is still broken'
+fi
+# While crash-loop is active, verifying a different drill must refuse.
+expect_failure_containing \
+  "Drill 'crash-loop' is active" \
+  bash ./lab verify port-tangle
+# Repair with command override (same as the published solution path).
+docker container rm --force dpl-drill-crash >/dev/null 2>&1 || true
+docker run -d \
+  --name dpl-drill-crash \
+  --label "${lab_label}" \
+  --network "${network_name}" \
+  -p 127.0.0.1:8240:8211 \
+  dpl-drill-crash:broken \
+  python app.py >/dev/null
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  if curl -fsS --max-time 2 http://127.0.0.1:8240/health >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+bash ./lab verify crash-loop
+docker container rm --force dpl-drill-crash >/dev/null 2>&1 || true
+
 # Leave a clean daemon for subsequent CI jobs where possible.
 bash ./lab registry stop >/dev/null 2>&1 || true
 docker compose -f ./tests/solutions/08_compose-stack/docker-compose.yml down --volumes >/dev/null 2>&1 || true
 docker compose -f ./tests/solutions/10_capstone/docker-compose.yml down --volumes >/dev/null 2>&1 || true
+docker compose -f ./drills/zombie-deps/stack/docker-compose.yml down --volumes >/dev/null 2>&1 || true
 bash ./lab down >/dev/null 2>&1 || true
 docker container rm --force \
   dpl-ex01-nginx dpl-ex02-api dpl-ex03-app dpl-ex04-api dpl-ex05-api \
   dpl-ex06-api dpl-ex07-api dpl-ex07-db \
+  dpl-drill-crash dpl-drill-port dpl-drill-squatter \
+  dpl-drill-api dpl-drill-db dpl-drill-perm dpl-drill-space \
   >/dev/null 2>&1 || true
-docker network rm dpl-ex07-front dpl-ex07-back >/dev/null 2>&1 || true
+docker network rm dpl-ex07-front dpl-ex07-back \
+  dpl-drill-front dpl-drill-back >/dev/null 2>&1 || true
+docker volume rm dpl-drill-state dpl-drill-perm-data >/dev/null 2>&1 || true
 
-printf 'Docker Practical Lab smoke test passed (scaffold + exercises 01-10).\n'
+printf 'Docker Practical Lab smoke test passed (scaffold + exercises 01-10 + drills).\n'

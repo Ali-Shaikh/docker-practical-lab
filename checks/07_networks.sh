@@ -64,11 +64,11 @@ fi
 
 # Front-only client must not reach db.
 set +e
-front_out="$(docker run --rm \
+docker run --rm \
   --label cloudsprocket.lab=docker \
   --network "${FRONT}" \
   python:3.14-slim \
-  python -c "import socket; socket.create_connection(('db', 6379), 3)" 2>&1)"
+  python -c "import socket; socket.create_connection(('db', 6379), 3)" >/dev/null 2>&1
 front_status=$?
 set -e
 if (( front_status != 0 )); then
@@ -76,6 +76,5 @@ if (( front_status != 0 )); then
 else
   fail_item "front-only client unexpectedly reached db:6379 (isolation broken)"
 fi
-unset front_out
 
 finish_check '07'

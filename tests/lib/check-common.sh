@@ -6,6 +6,7 @@ set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly ROOT
+# shellcheck disable=SC1091
 # shellcheck source=../../config/images.env
 source "${ROOT}/config/images.env"
 readonly LAB_LABEL='cloudsprocket.lab=docker'

@@ -2,6 +2,7 @@
 # Reference solution for exercise 01. Used by smoke; not shown to learners.
 set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck disable=SC1091
 # shellcheck source=../../config/images.env
 source "${ROOT}/config/images.env"
 

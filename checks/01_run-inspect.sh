@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Exercise 01 check: live nginx container, label, loopback port, HTTP.
 set -Eeuo pipefail
+# shellcheck disable=SC1091
 # shellcheck source=../tests/lib/check-common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/tests/lib/check-common.sh"
 

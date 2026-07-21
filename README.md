@@ -6,9 +6,9 @@ A practical Docker workspace you clone and keep. It is being built as a free,
 MIT-licensed alternative to short-lived hosted playgrounds, with self-checked
 exercises and realistic break/fix drills.
 
-This repository is an early alpha. The safe baseline (labelled cleanup, doctor,
-Codespaces) is in place, and three sample apps run natively under `apps/`.
-Self-checked exercises and drills arrive in later increments.
+This repository is an early alpha. The safe baseline, sample apps under `apps/`,
+and self-checked exercises **01-05** are ready. Exercises 06-10 and break/fix
+drills arrive in later increments.
 
 ## Quick start
 
@@ -74,24 +74,33 @@ directory or SSH keys.
 | `reset` | Remove old labelled resources and recreate the clean baseline |
 | `status` | Show labelled containers, ports, registry state and image sizes |
 | `doctor` | Check Docker, Compose, BuildKit, disk, ports and stale state |
-| `check NN` | Run an exercise check when exercises are installed |
+| `check NN` | Run an exercise self-check (01-05 available) |
+| `registry start\|stop` | Local registry on 127.0.0.1:8200 for exercise 04 |
 | `break NAME` | Apply a break/fix drill when drills are installed |
 | `verify NAME` | Verify a repair without mutating it |
 | `drills` | List installed drills |
 | `logs [container]` | Follow logs from a labelled lab container |
 | `version` | Print the lab version |
 
-## Planned learning track
+## Learning track
 
-The launch scope is ten exercises covering containers, Dockerfiles, image size,
-a local registry, state, non-root execution, networks, Compose, secrets and a
-capstone. Six drills cover crash loops, port mapping, networks, permissions,
-dependency health and safe disk cleanup.
+| Status | Content |
+|---|---|
+| Ready | Sample apps under `apps/` |
+| Ready | Exercises 01-05 in `exercises/` with `./lab check NN` |
+| Later | Exercises 06-10 (non-root, networks, Compose, secrets, capstone) |
+| Later | Six break/fix drills |
 
-Sample applications are under `apps/`. Exercise briefs, self-checks, reference
-solutions and drills land in small reviewed increments. Exercise briefs use the
-same three headings throughout: The situation, What you will learn, and Check
-your work.
+Start with exercise 01 after `./lab up`:
+
+```bash
+./lab up
+# follow exercises/01_run-inspect.md
+./lab check 01
+```
+
+Exercise briefs use the same three headings throughout: The situation, What you
+will learn, and Check your work.
 
 ## Requirements and cost
 

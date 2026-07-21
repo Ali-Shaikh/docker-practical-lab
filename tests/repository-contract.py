@@ -28,6 +28,22 @@ REQUIRED_FILES = {
     "apps/static-site/index.html",
     "apps/static-site/styles.css",
     "config/images.env",
+    "exercises/01_run-inspect.md",
+    "exercises/02_first-dockerfile.md",
+    "exercises/03_image-diet.md",
+    "exercises/04_tag-and-registry.md",
+    "exercises/05_volumes-and-state.md",
+    "checks/01_run-inspect.sh",
+    "checks/02_first-dockerfile.sh",
+    "checks/03_image-diet.sh",
+    "checks/04_tag-and-registry.sh",
+    "checks/05_volumes-and-state.sh",
+    "tests/lib/check-common.sh",
+    "tests/solutions/01_run-inspect.sh",
+    "tests/solutions/02_first-dockerfile.sh",
+    "tests/solutions/03_image-diet.sh",
+    "tests/solutions/04_tag-and-registry.sh",
+    "tests/solutions/05_volumes-and-state.sh",
     "lab",
     "lab.ps1",
     "tests/repository-contract.py",
@@ -232,5 +248,30 @@ require(
     "Image versus container" in static_html or "image versus container" in static_html.lower(),
     "static-site must teach image versus container in plain language",
 )
+
+wrapper = read("lab")
+require("registry_start" in wrapper or "run_registry" in wrapper, "Bash wrapper must support registry start/stop")
+require("127.0.0.1:8200" in wrapper, "registry must bind to loopback port 8200")
+ps_wrapper = read("lab.ps1")
+require("Invoke-RegistryCommand" in ps_wrapper, "PowerShell wrapper must support registry")
+require("registry <action>" in wrapper and "registry <action>" in ps_wrapper, "help must list registry")
+
+for exercise_md in (
+    "exercises/01_run-inspect.md",
+    "exercises/02_first-dockerfile.md",
+    "exercises/03_image-diet.md",
+    "exercises/04_tag-and-registry.md",
+    "exercises/05_volumes-and-state.md",
+):
+    text = read(exercise_md)
+    for heading in ("## The situation", "## What you will learn", "## Check your work"):
+        require(heading in text, f"{exercise_md} missing heading {heading}")
+    require("cloudsprocket.lab=docker" in text or "lab label" in text.lower() or "LABEL" in text,
+            f"{exercise_md} should mention labelling where relevant")
+
+# Exercise 01 must teach image vs container and pull/run explicitly.
+ex01 = read("exercises/01_run-inspect.md")
+for marker in ("image", "container", "pull", "127.0.0.1:8210", "dpl-ex01-nginx"):
+    require(marker in ex01, f"exercise 01 must teach {marker!r}")
 
 print("Repository contract check passed.")

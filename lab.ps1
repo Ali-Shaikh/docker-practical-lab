@@ -545,8 +545,8 @@ function Invoke-WorkspacePreparation {
     Invoke-BaseImagePreparation -Image ([string]$script:ImageConfigValues['NGINX_IMAGE'])
     Invoke-BaseImagePreparation -Image ([string]$script:ImageConfigValues['REGISTRY_IMAGE'])
     Write-Host
-    Write-Host 'The scaffold is ready. Exercise 01 lands in the exercises PR.'
-    Write-Host 'For now, inspect the environment with: .\lab.ps1 status'
+    Write-Host 'Workspace ready. Start with: .\lab.ps1 check 01 after completing exercise 01.'
+    Write-Host 'Browse exercises/ for the learning track.'
 }
 
 function Invoke-LabStart {
@@ -722,13 +722,84 @@ function Invoke-ExerciseCheck {
     }
 }
 
+function Invoke-RegistryCommand {
+    param(
+        [string]$Action = ''
+    )
+
+    Assert-DockerDaemon
+    switch -CaseSensitive ($Action) {
+        'start' {
+            Invoke-LabNetworkPreparation
+            Invoke-BaseImagePreparation -Image ([string]$script:ImageConfigValues['REGISTRY_IMAGE'])
+            & docker container inspect dpl-registry > $null 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                $ownerOutput = @(
+                    & docker container inspect --format '{{index .Config.Labels "cloudsprocket.lab"}}' dpl-registry 2> $null
+                )
+                $owner = (($ownerOutput -join "`n").Trim())
+                if ($owner -ne 'docker') {
+                    Write-LabError 'Container dpl-registry exists without the lab ownership label. Remove it yourself if it is safe to do so.'
+                }
+                $runningOutput = @(
+                    & docker container inspect --format '{{.State.Running}}' dpl-registry
+                )
+                $running = (($runningOutput -join "`n").Trim())
+                if ($running -eq 'true') {
+                    Write-Host 'Local registry dpl-registry is already running on 127.0.0.1:8200.'
+                    return
+                }
+                Invoke-DockerChecked -DockerArguments @('container', 'start', 'dpl-registry') | Out-Null
+                Write-Host 'Started existing registry container dpl-registry.'
+                return
+            }
+
+            Invoke-DockerChecked -DockerArguments @(
+                'run', '-d',
+                '--name', 'dpl-registry',
+                '--label', $script:LabLabel,
+                '--network', $script:NetworkName,
+                '-p', '127.0.0.1:8200:5000',
+                ([string]$script:ImageConfigValues['REGISTRY_IMAGE'])
+            ) | Out-Null
+            Write-Host 'Started local registry dpl-registry on 127.0.0.1:8200.'
+            break
+        }
+        'stop' {
+            & docker container inspect dpl-registry > $null 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host 'Local registry is not present.'
+                return
+            }
+            $ownerOutput = @(
+                & docker container inspect --format '{{index .Config.Labels "cloudsprocket.lab"}}' dpl-registry 2> $null
+            )
+            $owner = (($ownerOutput -join "`n").Trim())
+            if ($owner -ne 'docker') {
+                Write-LabError 'Container dpl-registry is not owned by this lab.'
+            }
+            Invoke-DockerChecked -DockerArguments @('container', 'rm', '--force', 'dpl-registry') | Out-Null
+            Write-Host 'Removed local registry container dpl-registry.'
+            break
+        }
+        '' {
+            Write-LabError 'Usage: .\lab.ps1 registry start|stop'
+            break
+        }
+        default {
+            Write-LabError ("Unknown registry action '{0}'. Use start or stop." -f $Action)
+            break
+        }
+    }
+}
+
 function Write-ReservedFeatureError {
     param(
         [Parameter(Mandatory = $true)]
         [string]$Feature
     )
 
-    Write-LabError ('{0} is reserved by the lab contract but is not available in 0.1.0-alpha.1.' -f $Feature)
+    Write-LabError ('{0} is reserved by the lab contract but is not available in this alpha yet.' -f $Feature)
 }
 
 function Show-Usage {
@@ -741,7 +812,8 @@ Commands:
   reset              Recreate the clean baseline using label-only cleanup
   status             Show lab containers, ports, registry and image sizes
   doctor             Check Docker, Compose, BuildKit, disk and ports
-  check <exercise>   Run an exercise check when exercises are installed
+  check <exercise>   Run an exercise self-check (01-05 in this alpha)
+  registry <action>  start|stop the local registry on 127.0.0.1:8200
   break <drill>      Apply a drill when drills are installed
   verify <drill>     Verify a drill repair without changing state
   drills             List drills when drills are installed
@@ -781,6 +853,10 @@ switch -CaseSensitive ($commandName) {
         Invoke-ExerciseCheck -Exercise $argument
         break
     }
+    'registry' {
+        Invoke-RegistryCommand -Action $argument
+        break
+    }
     'break' {
         Write-ReservedFeatureError -Feature 'Break/fix drills'
         break
@@ -790,7 +866,7 @@ switch -CaseSensitive ($commandName) {
         break
     }
     'drills' {
-        Write-Host 'No drills are available in 0.1.0-alpha.1.'
+        Write-Host 'No drills are available in this alpha yet.'
         break
     }
     'logs' {

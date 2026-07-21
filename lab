@@ -326,8 +326,8 @@ prepare_workspace() {
   ensure_image "${NODE_IMAGE}"
   ensure_image "${NGINX_IMAGE}"
   ensure_image "${REGISTRY_IMAGE}"
-  printf '\nThe scaffold is ready. Exercise 01 lands in the exercises PR.\n'
-  printf 'For now, inspect the environment with: ./lab status\n'
+  printf '\nWorkspace ready. Start with: ./lab check 01 after completing exercise 01.\n'
+  printf 'Browse exercises/ for the learning track.\n'
 }
 
 start_lab() {
@@ -432,9 +432,60 @@ run_check() {
   bash "${matches[0]}"
 }
 
+registry_start() {
+  require_daemon
+  ensure_network
+  ensure_image "${REGISTRY_IMAGE}"
+  if docker container inspect dpl-registry >/dev/null 2>&1; then
+    local owner state
+    owner="$(docker container inspect --format '{{index .Config.Labels "cloudsprocket.lab"}}' dpl-registry 2>/dev/null || true)"
+    [[ "${owner}" == 'docker' ]] \
+      || fail 'Container dpl-registry exists without the lab ownership label. Remove it yourself if it is safe to do so.'
+    state="$(docker container inspect --format '{{.State.Running}}' dpl-registry)"
+    if [[ "${state}" == 'true' ]]; then
+      printf 'Local registry dpl-registry is already running on 127.0.0.1:8200.\n'
+      return
+    fi
+    docker container start dpl-registry >/dev/null
+    printf 'Started existing registry container dpl-registry.\n'
+    return
+  fi
+  docker run -d \
+    --name dpl-registry \
+    --label "${lab_label}" \
+    --network "${network_name}" \
+    -p 127.0.0.1:8200:5000 \
+    "${REGISTRY_IMAGE}" >/dev/null
+  printf 'Started local registry dpl-registry on 127.0.0.1:8200.\n'
+}
+
+registry_stop() {
+  require_daemon
+  if ! docker container inspect dpl-registry >/dev/null 2>&1; then
+    printf 'Local registry is not present.\n'
+    return
+  fi
+  local owner
+  owner="$(docker container inspect --format '{{index .Config.Labels "cloudsprocket.lab"}}' dpl-registry 2>/dev/null || true)"
+  [[ "${owner}" == 'docker' ]] \
+    || fail 'Container dpl-registry is not owned by this lab.'
+  docker container rm --force dpl-registry >/dev/null
+  printf 'Removed local registry container dpl-registry.\n'
+}
+
+run_registry() {
+  local action="${1:-}"
+  case "${action}" in
+    start) registry_start ;;
+    stop) registry_stop ;;
+    '') fail 'Usage: ./lab registry start|stop' ;;
+    *) fail "Unknown registry action '${action}'. Use start or stop." ;;
+  esac
+}
+
 not_available() {
   local feature="$1"
-  fail "${feature} is reserved by the lab contract but is not available in 0.1.0-alpha.1."
+  fail "${feature} is reserved by the lab contract but is not available in this alpha yet."
 }
 
 show_usage() {
@@ -447,7 +498,8 @@ Commands:
   reset              Recreate the clean baseline using label-only cleanup
   status             Show lab containers, ports, registry and image sizes
   doctor             Check Docker, Compose, BuildKit, disk and ports
-  check <exercise>   Run an exercise check when exercises are installed
+  check <exercise>   Run an exercise self-check (01-05 in this alpha)
+  registry <action>  start|stop the local registry on 127.0.0.1:8200
   break <drill>      Apply a drill when drills are installed
   verify <drill>     Verify a drill repair without changing state
   drills             List drills when drills are installed
@@ -468,9 +520,10 @@ case "${command_name}" in
   status) show_status ;;
   doctor) doctor ;;
   check) run_check "${argument}" ;;
+  registry) run_registry "${argument}" ;;
   break) not_available 'Break/fix drills' ;;
   verify) not_available 'Break/fix verification' ;;
-  drills) printf 'No drills are available in 0.1.0-alpha.1.\n' ;;
+  drills) printf 'No drills are available in this alpha yet.\n' ;;
   logs) show_logs "${argument}" ;;
   version) tr -d '\r\n' < "${root_dir}/VERSION"; printf '\n' ;;
   help|-h|--help) show_usage ;;

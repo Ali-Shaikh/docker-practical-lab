@@ -232,14 +232,14 @@ printf 'Checking doctor and scaffold command behaviour.\n'
 bash ./lab doctor
 
 help_output="$(bash ./lab help)"
-for reserved_verb in check break verify drills; do
+for reserved_verb in check break verify drills registry; do
   [[ "${help_output}" == *"${reserved_verb}"* ]] \
-    || fail "help does not advertise the reserved ${reserved_verb} command"
+    || fail "help does not advertise the ${reserved_verb} command"
 done
 
 expect_failure_containing \
-  'Exercise 01 is not available in this alpha yet.' \
-  bash ./lab check 01
+  'Exercise 99 is not available in this alpha yet.' \
+  bash ./lab check 99
 expect_failure_containing \
   'Break/fix drills is reserved by the lab contract but is not available' \
   bash ./lab break smoke-placeholder
@@ -247,8 +247,8 @@ expect_failure_containing \
   'Break/fix verification is reserved by the lab contract but is not available' \
   bash ./lab verify smoke-placeholder
 drills_output="$(bash ./lab drills)"
-[[ "${drills_output}" == *'No drills are available in 0.1.0-alpha.1.'* ]] \
-  || fail 'the reserved drills command did not report scaffold availability clearly'
+[[ "${drills_output}" == *'No drills are available in this alpha yet.'* ]] \
+  || fail 'the reserved drills command did not report availability clearly'
 
 printf 'Checking first and repeated startup.\n'
 bash ./lab up
@@ -434,4 +434,25 @@ start_container_and_expect_success "${decoy_container_id}"
 [[ "$(docker container inspect --format '{{.Id}}' "${decoy_container_name}")" \
   == "${decoy_container_id}" ]] || fail 'the decoy container identity changed after its canary check'
 
-printf 'Docker Practical Lab scaffold smoke test passed.\n'
+printf 'Running exercise 01-05 reference solutions and checks.\n'
+bash ./lab up
+for exercise in 01 02 03 04 05; do
+  printf '  exercise %s...\n' "${exercise}"
+  case "${exercise}" in
+    01) bash ./tests/solutions/01_run-inspect.sh ;;
+    02) bash ./tests/solutions/02_first-dockerfile.sh ;;
+    03) bash ./tests/solutions/03_image-diet.sh ;;
+    04) bash ./tests/solutions/04_tag-and-registry.sh ;;
+    05) bash ./tests/solutions/05_volumes-and-state.sh ;;
+  esac
+  bash ./lab check "${exercise}"
+done
+
+# Leave a clean daemon for subsequent CI jobs where possible.
+bash ./lab registry stop >/dev/null 2>&1 || true
+bash ./lab down >/dev/null 2>&1 || true
+docker container rm --force \
+  dpl-ex01-nginx dpl-ex02-api dpl-ex03-app dpl-ex04-api dpl-ex05-api \
+  >/dev/null 2>&1 || true
+
+printf 'Docker Practical Lab smoke test passed (scaffold + exercises 01-05).\n'

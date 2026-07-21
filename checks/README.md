@@ -1,4 +1,8 @@
 # Exercise checks
 
-Checks are host-side Bash scripts named `NN_slug.sh`. They inspect learner
-resources without revealing the answer and return a useful non-zero failure.
+Scripts named `NN_slug.sh` are run by `./lab check NN`.
+
+They assert learner-visible behaviour only: labels, ports, HTTP, volumes,
+registry catalog. They never print full solutions.
+
+Shared helpers live in `tests/lib/check-common.sh`.

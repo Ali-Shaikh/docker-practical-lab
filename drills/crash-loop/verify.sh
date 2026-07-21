@@ -4,6 +4,7 @@ set -Eeuo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/tests/lib/drill-common.sh"
 
 require_daemon
+refuse_if_mismatched_active_drill 'crash-loop'
 failures=0
 pass() { printf '  pass  %s\n' "$*"; }
 fail_item() { printf '  fail  %s\n' "$*" >&2; failures=$((failures + 1)); }
@@ -30,7 +31,7 @@ else
 fi
 
 if (( failures == 0 )); then
-  clear_active_drill
+  clear_active_drill 'crash-loop'
   printf '\ncrash-loop: repaired.\n'
   exit 0
 fi

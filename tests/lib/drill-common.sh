@@ -50,8 +50,14 @@ write_active_drill() {
 }
 
 clear_active_drill() {
-  # Clear only the active-drill marker so other drill state files
-  # (for example space-hog decoy ids) remain readable until reset.
+  # Clear only when the named drill is active (or no name was given).
+  # Other state files on the marker volume (for example space-hog decoy ids)
+  # stay until reset.
+  local wanted="${1:-}" active
+  active="$(read_active_drill | tr -d '\r\n')"
+  if [[ -n "${wanted}" && -n "${active}" && "${active}" != "${wanted}" ]]; then
+    return 0
+  fi
   if docker volume inspect "${DRILL_MARKER_VOLUME}" >/dev/null 2>&1; then
     MSYS_NO_PATHCONV=1 docker run --rm \
       --label "${LAB_LABEL}" \
@@ -66,5 +72,15 @@ refuse_if_other_drill_active() {
   active="$(read_active_drill | tr -d '\r\n')"
   if [[ -n "${active}" && "${active}" != "${wanted}" ]]; then
     fail "Drill '${active}' is already active. Run ./lab verify ${active} or ./lab reset first."
+  fi
+}
+
+# Used by verify scripts and the lab wrapper so a repaired older drill cannot
+# clear the marker of a different active drill.
+refuse_if_mismatched_active_drill() {
+  local wanted="$1" active
+  active="$(read_active_drill | tr -d '\r\n')"
+  if [[ -n "${active}" && "${active}" != "${wanted}" ]]; then
+    fail "Drill '${active}' is active. Run: ./lab verify ${active}"
   fi
 }

@@ -4,6 +4,7 @@ set -Eeuo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/tests/lib/drill-common.sh"
 
 require_daemon
+refuse_if_mismatched_active_drill 'perm-wall'
 failures=0
 pass() { printf '  pass  %s\n' "$*"; }
 fail_item() { printf '  fail  %s\n' "$*" >&2; failures=$((failures + 1)); }
@@ -35,7 +36,7 @@ fi
 rm -f "${note_file}"
 
 if (( failures == 0 )); then
-  clear_active_drill
+  clear_active_drill 'perm-wall'
   printf '\nperm-wall: repaired.\n'
   exit 0
 fi

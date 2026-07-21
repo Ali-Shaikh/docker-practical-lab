@@ -531,6 +531,18 @@ run_verify() {
 
   dir="$(resolve_drill_dir "${name}")"
   [[ -f "${dir}/verify.sh" ]] || fail "Drill '${name}' has no verify.sh"
+
+  # Refuse verifying a different drill while another marker is active, so a
+  # repaired older drill cannot clear the current drill's marker.
+  if docker volume inspect "${marker_vol}" >/dev/null 2>&1; then
+    active="$(MSYS_NO_PATHCONV=1 docker run --rm --label "${lab_label}" \
+      -v "${marker_vol}:/state:ro" "${PYTHON_IMAGE}" \
+      cat /state/active-drill 2>/dev/null | tr -d '\r\n' || true)"
+    if [[ -n "${active}" && "${active}" != "${name}" ]]; then
+      fail "Drill '${active}' is active. Run: ./lab verify ${active}"
+    fi
+  fi
+
   bash "${dir}/verify.sh"
 }
 

@@ -458,6 +458,10 @@ bash ./lab break crash-loop
 if bash ./lab verify crash-loop >/dev/null 2>&1; then
   fail 'verify crash-loop should fail while the drill is still broken'
 fi
+# While crash-loop is active, verifying a different drill must refuse.
+expect_failure_containing \
+  "Drill 'crash-loop' is active" \
+  bash ./lab verify port-tangle
 # Repair with command override (same as the published solution path).
 docker container rm --force dpl-drill-crash >/dev/null 2>&1 || true
 docker run -d \

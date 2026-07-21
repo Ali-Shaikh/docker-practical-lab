@@ -1,0 +1,9 @@
+FROM nginx:1.30-alpine
+
+LABEL cloudsprocket.lab=docker
+
+COPY index.html /usr/share/nginx/html/index.html
+COPY styles.css /usr/share/nginx/html/styles.css
+
+HEALTHCHECK --interval=5s --timeout=3s --start-period=3s --retries=5 \
+  CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1

@@ -434,9 +434,9 @@ start_container_and_expect_success "${decoy_container_id}"
 [[ "$(docker container inspect --format '{{.Id}}' "${decoy_container_name}")" \
   == "${decoy_container_id}" ]] || fail 'the decoy container identity changed after its canary check'
 
-printf 'Running exercise 01-05 reference solutions and checks.\n'
+printf 'Running exercise 01-10 reference solutions and checks.\n'
 bash ./lab up
-for exercise in 01 02 03 04 05; do
+for exercise in 01 02 03 04 05 06 07 08 09 10; do
   printf '  exercise %s...\n' "${exercise}"
   case "${exercise}" in
     01) bash ./tests/solutions/01_run-inspect.sh ;;
@@ -444,15 +444,24 @@ for exercise in 01 02 03 04 05; do
     03) bash ./tests/solutions/03_image-diet.sh ;;
     04) bash ./tests/solutions/04_tag-and-registry.sh ;;
     05) bash ./tests/solutions/05_volumes-and-state.sh ;;
+    06) bash ./tests/solutions/06_non-root.sh ;;
+    07) bash ./tests/solutions/07_networks.sh ;;
+    08) bash ./tests/solutions/08_compose-stack.sh ;;
+    09) bash ./tests/solutions/09_config-and-secrets.sh ;;
+    10) bash ./tests/solutions/10_capstone.sh ;;
   esac
   bash ./lab check "${exercise}"
 done
 
 # Leave a clean daemon for subsequent CI jobs where possible.
 bash ./lab registry stop >/dev/null 2>&1 || true
+docker compose -f ./tests/solutions/08_compose-stack/docker-compose.yml down --volumes >/dev/null 2>&1 || true
+docker compose -f ./tests/solutions/10_capstone/docker-compose.yml down --volumes >/dev/null 2>&1 || true
 bash ./lab down >/dev/null 2>&1 || true
 docker container rm --force \
   dpl-ex01-nginx dpl-ex02-api dpl-ex03-app dpl-ex04-api dpl-ex05-api \
+  dpl-ex06-api dpl-ex07-api dpl-ex07-db \
   >/dev/null 2>&1 || true
+docker network rm dpl-ex07-front dpl-ex07-back >/dev/null 2>&1 || true
 
-printf 'Docker Practical Lab smoke test passed (scaffold + exercises 01-05).\n'
+printf 'Docker Practical Lab smoke test passed (scaffold + exercises 01-10).\n'

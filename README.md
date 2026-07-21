@@ -7,8 +7,8 @@ MIT-licensed alternative to short-lived hosted playgrounds, with self-checked
 exercises and realistic break/fix drills.
 
 This repository is an early alpha. The safe baseline, sample apps under `apps/`,
-and self-checked exercises **01-05** are ready. Exercises 06-10 and break/fix
-drills arrive in later increments.
+and self-checked exercises **01-10** are ready. Break/fix drills arrive in a
+later increment.
 
 ## Quick start
 
@@ -74,7 +74,7 @@ directory or SSH keys.
 | `reset` | Remove old labelled resources and recreate the clean baseline |
 | `status` | Show labelled containers, ports, registry state and image sizes |
 | `doctor` | Check Docker, Compose, BuildKit, disk, ports and stale state |
-| `check NN` | Run an exercise self-check (01-05 available) |
+| `check NN` | Run an exercise self-check (01-10 available) |
 | `registry start\|stop` | Local registry on 127.0.0.1:8200 for exercise 04 |
 | `break NAME` | Apply a break/fix drill when drills are installed |
 | `verify NAME` | Verify a repair without mutating it |
@@ -87,8 +87,7 @@ directory or SSH keys.
 | Status | Content |
 |---|---|
 | Ready | Sample apps under `apps/` |
-| Ready | Exercises 01-05 in `exercises/` with `./lab check NN` |
-| Later | Exercises 06-10 (non-root, networks, Compose, secrets, capstone) |
+| Ready | Exercises 01-10 in `exercises/` with `./lab check NN` |
 | Later | Six break/fix drills |
 
 Start with exercise 01 after `./lab up`:

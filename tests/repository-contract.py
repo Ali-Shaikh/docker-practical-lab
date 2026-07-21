@@ -33,17 +33,39 @@ REQUIRED_FILES = {
     "exercises/03_image-diet.md",
     "exercises/04_tag-and-registry.md",
     "exercises/05_volumes-and-state.md",
+    "exercises/06_non-root.md",
+    "exercises/07_networks.md",
+    "exercises/08_compose-stack.md",
+    "exercises/09_config-and-secrets.md",
+    "exercises/10_capstone.md",
     "checks/01_run-inspect.sh",
     "checks/02_first-dockerfile.sh",
     "checks/03_image-diet.sh",
     "checks/04_tag-and-registry.sh",
     "checks/05_volumes-and-state.sh",
+    "checks/06_non-root.sh",
+    "checks/07_networks.sh",
+    "checks/08_compose-stack.sh",
+    "checks/09_config-and-secrets.sh",
+    "checks/10_capstone.sh",
     "tests/lib/check-common.sh",
     "tests/solutions/01_run-inspect.sh",
     "tests/solutions/02_first-dockerfile.sh",
     "tests/solutions/03_image-diet.sh",
     "tests/solutions/04_tag-and-registry.sh",
     "tests/solutions/05_volumes-and-state.sh",
+    "tests/solutions/06_non-root.sh",
+    "tests/solutions/07_networks.sh",
+    "tests/solutions/08_compose-stack.sh",
+    "tests/solutions/09_config-and-secrets.sh",
+    "tests/solutions/10_capstone.sh",
+    "tests/solutions/06_non-root/Dockerfile",
+    "tests/solutions/08_compose-stack/Dockerfile",
+    "tests/solutions/08_compose-stack/docker-compose.yml",
+    "tests/solutions/09_config-and-secrets/Dockerfile",
+    "tests/solutions/10_capstone/Dockerfile.api",
+    "tests/solutions/10_capstone/Dockerfile.web",
+    "tests/solutions/10_capstone/docker-compose.yml",
     "lab",
     "lab.ps1",
     "tests/repository-contract.py",
@@ -262,6 +284,11 @@ for exercise_md in (
     "exercises/03_image-diet.md",
     "exercises/04_tag-and-registry.md",
     "exercises/05_volumes-and-state.md",
+    "exercises/06_non-root.md",
+    "exercises/07_networks.md",
+    "exercises/08_compose-stack.md",
+    "exercises/09_config-and-secrets.md",
+    "exercises/10_capstone.md",
 ):
     text = read(exercise_md)
     for heading in ("## The situation", "## What you will learn", "## Check your work"):
@@ -273,5 +300,34 @@ for exercise_md in (
 ex01 = read("exercises/01_run-inspect.md")
 for marker in ("image", "container", "pull", "127.0.0.1:8210", "dpl-ex01-nginx"):
     require(marker in ex01, f"exercise 01 must teach {marker!r}")
+
+# Exercises 06-10: smoke-test critical markers.
+ex06 = read("exercises/06_non-root.md")
+for marker in ("10001", "dpl-ex06-api", "dpl-ex06-data", "127.0.0.1:8211"):
+    require(marker in ex06, f"exercise 06 must teach {marker!r}")
+
+ex07 = read("exercises/07_networks.md")
+for marker in ("dpl-ex07-front", "dpl-ex07-back", "valkey", "db"):
+    require(marker in ex07, f"exercise 07 must teach {marker!r}")
+
+ex08 = read("exercises/08_compose-stack.md")
+for marker in ("valkey", "postgres", "service_healthy", "name: dpl", "8221"):
+    require(marker in ex08, f"exercise 08 must teach {marker!r}")
+
+ex09 = read("exercises/09_config-and-secrets.md")
+for marker in ("LAB_LEAKED_SECRET", "dpl-secret-demo:ex09", "type=secret", "dpl-ex09-do-not-leak"):
+    require(marker in ex09, f"exercise 09 must teach {marker!r}")
+
+ex10 = read("exercises/10_capstone.md")
+for marker in ("static-site", "8230", "dpl-capstone", "10001"):
+    require(marker in ex10, f"exercise 10 must teach {marker!r}")
+
+# Help text advertises the full 01-10 track once those checks exist.
+for wrapper_path in ("lab", "lab.ps1"):
+    wrapper_text = read(wrapper_path)
+    require(
+        "01-10" in wrapper_text,
+        f"{wrapper_path} help should advertise exercise checks 01-10",
+    )
 
 print("Repository contract check passed.")

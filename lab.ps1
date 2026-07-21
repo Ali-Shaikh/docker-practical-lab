@@ -812,7 +812,7 @@ Commands:
   reset              Recreate the clean baseline using label-only cleanup
   status             Show lab containers, ports, registry and image sizes
   doctor             Check Docker, Compose, BuildKit, disk and ports
-  check <exercise>   Run an exercise self-check (01-05 in this alpha)
+  check <exercise>   Run an exercise self-check (01-10 in this alpha)
   registry <action>  start|stop the local registry on 127.0.0.1:8200
   break <drill>      Apply a drill when drills are installed
   verify <drill>     Verify a drill repair without changing state

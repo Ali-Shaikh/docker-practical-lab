@@ -1,0 +1,62 @@
+name: dpl-capstone
+
+services:
+  web:
+    build:
+      context: ../../../apps/static-site
+      # dockerfile path is resolved relative to the build context
+      dockerfile: ../../tests/solutions/10_capstone/Dockerfile.web
+    labels:
+      cloudsprocket.lab: docker
+    ports:
+      - "127.0.0.1:8230:80"
+    networks:
+      - cap
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+  api:
+    build:
+      context: ../../../apps/python-api
+      # dockerfile path is resolved relative to the build context
+      dockerfile: ../../tests/solutions/10_capstone/Dockerfile.api
+    labels:
+      cloudsprocket.lab: docker
+    environment:
+      PORT: "8211"
+      DATA_DIR: /data
+    ports:
+      - "127.0.0.1:8231:8211"
+    volumes:
+      - api-data:/data
+    networks:
+      - cap
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8211/health', timeout=2)",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+networks:
+  cap:
+    labels:
+      cloudsprocket.lab: docker
+
+volumes:
+  api-data:
+    labels:
+      cloudsprocket.lab: docker

@@ -1,0 +1,81 @@
+name: dpl
+
+services:
+  api:
+    build:
+      context: ../../../apps/python-api
+      # dockerfile path is resolved relative to the build context
+      dockerfile: ../../tests/solutions/08_compose-stack/Dockerfile
+    labels:
+      cloudsprocket.lab: docker
+    environment:
+      PORT: "8211"
+      DATA_DIR: /data
+    ports:
+      - "127.0.0.1:8221:8211"
+    volumes:
+      - api-data:/data
+    networks:
+      - stack
+    depends_on:
+      valkey:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8211/health', timeout=2)",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    labels:
+      cloudsprocket.lab: docker
+    networks:
+      - stack
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+  postgres:
+    image: postgres:17-alpine
+    labels:
+      cloudsprocket.lab: docker
+    environment:
+      POSTGRES_PASSWORD: dpl-ex08-lab-only
+      POSTGRES_USER: postgres
+      POSTGRES_DB: dpl
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - stack
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dpl"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+networks:
+  stack:
+    labels:
+      cloudsprocket.lab: docker
+
+volumes:
+  api-data:
+    labels:
+      cloudsprocket.lab: docker
+  pg-data:
+    labels:
+      cloudsprocket.lab: docker

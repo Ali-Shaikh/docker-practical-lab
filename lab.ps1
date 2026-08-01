@@ -62,6 +62,50 @@ function Assert-DockerCli {
     }
 }
 
+function Resolve-LabBash {
+    # Git for Windows' default install adds Git\cmd to PATH, which carries
+    # git.exe but not bash.exe (that lives in Git\bin). A PATH lookup alone
+    # therefore rejects machines that do have Git Bash, so fall back to the
+    # install root implied by git.exe and then to the standard locations.
+    $onPath = Get-Command bash -ErrorAction SilentlyContinue
+    if ($null -ne $onPath -and $onPath.Source) {
+        return [string]$onPath.Source
+    }
+
+    $candidates = New-Object System.Collections.Generic.List[string]
+
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if ($null -ne $git -and $git.Source) {
+        $gitRoot = Split-Path -Parent (Split-Path -Parent ([string]$git.Source))
+        if (-not [string]::IsNullOrWhiteSpace($gitRoot)) {
+            $candidates.Add((Join-Path $gitRoot 'bin\bash.exe'))
+            $candidates.Add((Join-Path $gitRoot 'usr\bin\bash.exe'))
+        }
+    }
+
+    foreach ($root in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:LOCALAPPDATA)) {
+        if (-not [string]::IsNullOrWhiteSpace($root)) {
+            $candidates.Add((Join-Path $root 'Git\bin\bash.exe'))
+        }
+    }
+
+    foreach ($candidate in $candidates) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            return [string]$candidate
+        }
+    }
+
+    return ''
+}
+
+function Assert-LabBash {
+    $bash = Resolve-LabBash
+    if ([string]::IsNullOrWhiteSpace($bash)) {
+        Write-LabError 'bash was not found, and exercise checks and drills run through it. Install Git for Windows, which includes Git Bash, or enable WSL. If Git for Windows is already installed, bash.exe usually sits in "C:\Program Files\Git\bin".'
+    }
+    return $bash
+}
+
 function Get-DockerContext {
     $contextOutput = @(& docker context show 2> $null)
     if ($LASTEXITCODE -ne 0) {
@@ -520,6 +564,15 @@ function Invoke-LabDoctor {
         Write-Host 'PASS  No stale labelled containers were found.'
     }
 
+    $labBash = Resolve-LabBash
+    if ([string]::IsNullOrWhiteSpace($labBash)) {
+        Write-Host 'FAIL  bash was not found, so exercise checks and drills cannot run. Install Git for Windows, which includes Git Bash, or enable WSL. If it is already installed, bash.exe usually sits in "C:\Program Files\Git\bin".'
+        $failures++
+    }
+    else {
+        Write-Host ('PASS  bash is available for checks and drills ({0}).' -f $labBash)
+    }
+
     if ($env:CODESPACES -eq 'true') {
         Write-Host 'PASS  Codespaces Docker-in-Docker is isolated from your local Docker daemon.'
         Write-Host 'INFO  Personal accounts include 120 core-hours and 15 GB storage monthly. Stop the Codespace when finished.'
@@ -712,11 +765,9 @@ function Invoke-ExerciseCheck {
         Write-LabError ('Exercise {0} is not available in this alpha yet.' -f $Exercise)
     }
 
-    if ($null -eq (Get-Command bash -ErrorAction SilentlyContinue)) {
-        Write-LabError 'Exercise checks run through bash, which was not found. Install Git for Windows (it includes Git Bash) or enable WSL, then try again.'
-    }
+    $bash = Assert-LabBash
 
-    & bash $checkFiles[0].FullName
+    & $bash $checkFiles[0].FullName
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
@@ -829,27 +880,23 @@ function Invoke-DrillBreak {
     if (-not (Test-Path -LiteralPath $breakScript -PathType Leaf)) {
         Write-LabError ("Drill '{0}' has no break.sh" -f $Name)
     }
-    if ($null -eq (Get-Command bash -ErrorAction SilentlyContinue)) {
-        Write-LabError 'Drills run through bash. Install Git for Windows or enable WSL.'
-    }
-    & bash $breakScript
+    $bash = Assert-LabBash
+    & $bash $breakScript
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
 function Invoke-DrillVerify {
     param([string]$Name = '')
     Assert-DockerDaemon
-    if ($null -eq (Get-Command bash -ErrorAction SilentlyContinue)) {
-        Write-LabError 'Drills run through bash. Install Git for Windows or enable WSL.'
-    }
+    $bash = Assert-LabBash
     # Delegate to the Bash wrapper so marker semantics stay identical.
     Push-Location $script:RootDir
     try {
         if ([string]::IsNullOrWhiteSpace($Name)) {
-            & bash ./lab verify
+            & $bash ./lab verify
         }
         else {
-            & bash ./lab verify $Name
+            & $bash ./lab verify $Name
         }
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }

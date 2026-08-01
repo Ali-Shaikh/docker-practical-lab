@@ -2,7 +2,12 @@
 
 Edit `drills/zombie-deps/stack/docker-compose.yml`:
 
+Keep the `name:` line. Without it Compose derives the project name from the
+`stack` directory, starts a second copy of the stack, and the original one keeps
+port 8244.
+
 ```yaml
+name: dpl-drill
 services:
   valkey:
     image: valkey/valkey:8-alpine

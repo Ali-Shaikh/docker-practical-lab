@@ -95,6 +95,21 @@ else
   fi
 fi
 
+# Tie port 8244 to THIS stack's api container before trusting the HTTP answer.
+# Without this, an older compose project left holding the port answers the curl
+# and the drill reports repaired while the repaired container never started.
+api_cid="$(docker compose -f "${compose_file}" ps -q api 2>/dev/null | head -n1 || true)"
+if [[ -z "${api_cid}" ]]; then
+  fail_item 'no api container found for the drill stack'
+else
+  api_ports="$(docker inspect --format '{{index .NetworkSettings.Ports "8211/tcp"}}' "${api_cid}" 2>/dev/null || true)"
+  if [[ "${api_ports}" == *'8244'* ]]; then
+    pass 'the repaired api container is the one publishing 8244'
+  else
+    fail_item 'the repaired api container does not publish 127.0.0.1:8244; another compose project may still hold it (run: docker compose ls --all)'
+  fi
+fi
+
 api_up=0
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
   if curl -fsS --max-time 2 http://127.0.0.1:8244/health 2>/dev/null | grep -q status; then

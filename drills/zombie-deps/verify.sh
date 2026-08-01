@@ -102,9 +102,13 @@ api_cid="$(docker compose -f "${compose_file}" ps -q api 2>/dev/null | head -n1 
 if [[ -z "${api_cid}" ]]; then
   fail_item 'no api container found for the drill stack'
 else
-  api_ports="$(docker inspect --format '{{index .NetworkSettings.Ports "8211/tcp"}}' "${api_cid}" 2>/dev/null || true)"
-  if [[ "${api_ports}" == *'8244'* ]]; then
-    pass 'the repaired api container is the one publishing 8244'
+  # Render one HostIp:HostPort per line and match the whole line, so a near miss
+  # like 18244, or a binding on 0.0.0.0 rather than loopback, cannot satisfy it.
+  api_bindings="$(docker inspect \
+    --format '{{range $p, $conf := .NetworkSettings.Ports}}{{if eq $p "8211/tcp"}}{{range $conf}}{{.HostIp}}:{{.HostPort}}{{println}}{{end}}{{end}}{{end}}' \
+    "${api_cid}" 2>/dev/null || true)"
+  if printf '%s\n' "${api_bindings}" | grep -qx '127\.0\.0\.1:8244'; then
+    pass 'the repaired api container is the one publishing 127.0.0.1:8244'
   else
     fail_item 'the repaired api container does not publish 127.0.0.1:8244; another compose project may still hold it (run: docker compose ls --all)'
   fi
